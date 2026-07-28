@@ -660,6 +660,13 @@ function openManagePanel() {
         </div>
 
         <div class="admin-panel">
+          <div class="section-title" style="margin-top:0">1b. Excel'deki Mevcut Değerlendirmeleri İçe Aktar</div>
+          <p style="font-size:13px;color:var(--ink-soft)">Yüklediğiniz Excel'de <b>${EVALUATIONS_SEED.length}</b> kişi için zaten doldurulmuş değerlendirme verisi bulundu. Bu veriyi Firestore'a aktarabilirsiniz — <b>henüz kaydı olmayan</b> kişilere yazılır, bir müdürün sistemde zaten girdiği veri asla üzerine yazılmaz.</p>
+          <button class="btn btn-ghost btn-sm" id="importEvalBtn">Excel Değerlendirmelerini İçe Aktar</button>
+          <div id="importEvalMsg" style="font-size:12.5px;margin-top:8px"></div>
+        </div>
+
+        <div class="admin-panel">
           <div class="section-title" style="margin-top:0">2. Müdürü Eşleşmeyen Personel</div>
           <div id="unassignedList"></div>
         </div>
@@ -705,6 +712,62 @@ function openManagePanel() {
     }
     el("#seedBtn").disabled = false;
     el("#seedBtn").textContent = "Excel Listesini Yeniden Yükle / Güncelle";
+  };
+
+  el("#importEvalBtn").onclick = async () => {
+    const btn = el("#importEvalBtn");
+    const msg = el("#importEvalMsg");
+    btn.disabled = true;
+    btn.textContent = "İçe aktarılıyor…";
+    let imported = 0, skipped = 0;
+    try {
+      const batch = writeBatch(db);
+      EVALUATIONS_SEED.forEach((seed) => {
+        if (evaluationsMap[seed.employeeId]) { skipped++; return; }
+        const emp = employeesCache.find((e) => e.id === seed.employeeId) || EMPLOYEES.find((e) => e.id === seed.employeeId);
+        if (!emp) { skipped++; return; }
+        const d = {
+          potansiyel: seed.potansiyel || {},
+          ogrenmeCevikligi: seed.ogrenmeCevikligi || {},
+          teknikHakimiyet: seed.teknikHakimiyet || {},
+          liderlikPotansiyeli: seed.liderlikPotansiyeli || "",
+          yetenekHavuzuAlinmali: seed.yetenekHavuzuAlinmali || "",
+          hazirOlmaSuresi: seed.hazirOlmaSuresi || "",
+          yedekPozisyonlar: seed.yedekPozisyonlar || "",
+          ayrilmaRiski: seed.ayrilmaRiski || "",
+          gelisimAlanlari: seed.gelisimAlanlari || "",
+          fonksiyonelGecisUygun: seed.fonksiyonelGecisUygun || "",
+          fonksiyonelGecisDept: seed.fonksiyonelGecisDept || "",
+          egitimOnerileri: seed.egitimOnerileri || [],
+          gerekce: seed.gerekce || ""
+        };
+        const der = computeDerived(d);
+        const payload = {
+          employeeId: emp.id,
+          adSoyad: emp.adSoyad,
+          departman: emp.departman || "",
+          bolum: emp.bolum || "",
+          unvan: emp.mevcutUnvan || "",
+          muduluk: emp.muduluk || null,
+          ...d,
+          ...der,
+          status: isComplete(d) ? "tamamlandi" : "taslak",
+          submittedByUid: currentUid,
+          submittedByName: "Excel'den İçe Aktarıldı",
+          updatedAt: serverTimestamp()
+        };
+        batch.set(doc(db, "evaluations", emp.id), payload, { merge: true });
+        imported++;
+      });
+      await batch.commit();
+      msg.style.color = "var(--good)";
+      msg.textContent = `${imported} kişi için değerlendirme aktarıldı, ${skipped} kişi zaten kayıtlı olduğu için atlandı.`;
+    } catch (e) {
+      msg.style.color = "var(--bad)";
+      msg.textContent = "Hata: " + e.message;
+    }
+    btn.disabled = false;
+    btn.textContent = "Excel Değerlendirmelerini İçe Aktar";
   };
 
   function drawUnassigned() {
