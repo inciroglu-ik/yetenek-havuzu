@@ -761,6 +761,45 @@ async function exportSinglePersonExcel(emp, ev) {
 }
 
 // ---------------------------------------------------------------
+// ADMIN: STAT CARD DRILL-DOWN (list of people behind a stat number)
+// ---------------------------------------------------------------
+function openStatListDrawer(title, list) {
+  const sorted = [...list].sort((a, b) => a.adSoyad.localeCompare(b.adSoyad, "tr"));
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="drawer">
+      <div class="drawer-head">
+        <div>
+          <h2>${title}</h2>
+          <div class="meta">${sorted.length} personel</div>
+        </div>
+        <button class="close-x" id="closeStatDrawer">✕</button>
+      </div>
+      <div class="drawer-body">
+        <div class="card-list">
+          ${sorted.length ? sorted.map((e) => `
+            <div class="emp-card" data-id="${e.id}" style="cursor:pointer">
+              <div class="main">
+                <b>${e.adSoyad}</b>
+                <div class="meta">${e.mevcutUnvan || ""} · ${e.departman || ""} / ${e.bolum || ""} · Müdür: ${e.muduluk || "Atanmadı"}</div>
+              </div>
+            </div>`).join("") : `<div class="empty-state">Bu kritere uyan personel bulunamadı.</div>`}
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelector("#closeStatDrawer").onclick = () => overlay.remove();
+  overlay.querySelectorAll(".emp-card[data-id]").forEach((card) => {
+    card.addEventListener("click", () => {
+      const emp = employeesCache.find((x) => x.id === card.dataset.id);
+      if (emp) openAdminDetailDrawer(emp);
+    });
+  });
+}
+
+// ---------------------------------------------------------------
 // ADMIN VIEW
 // ---------------------------------------------------------------
 function renderAdmin() {
@@ -794,9 +833,9 @@ function renderAdmin() {
       <div class="stat-card"><div class="n">${total - done - draft}</div><div class="l">Bekliyor</div></div>
     </div>
     <div class="stat-row">
-      <div class="stat-card"><div class="n">${havuzEvet}</div><div class="l">Yetenek Havuzuna Alınmalı (Evet)</div></div>
-      <div class="stat-card"><div class="n">${liderlikVar}</div><div class="l">Liderlik Potansiyeli (Var)</div></div>
-      <div class="stat-card"><div class="n">${fonksiyonelEvet}</div><div class="l">Fonksiyonel Geçişe Uygun (Evet)</div></div>
+      <div class="stat-card" id="statHavuz" style="cursor:pointer"><div class="n">${havuzEvet}</div><div class="l">Yetenek Havuzuna Alınmalı (Evet)</div></div>
+      <div class="stat-card" id="statLiderlik" style="cursor:pointer"><div class="n">${liderlikVar}</div><div class="l">Liderlik Potansiyeli (Var)</div></div>
+      <div class="stat-card" id="statFonksiyonel" style="cursor:pointer"><div class="n">${fonksiyonelEvet}</div><div class="l">Fonksiyonel Geçişe Uygun (Evet)</div></div>
     </div>
     ${noManager ? `<div class="error-box" style="display:block;background:var(--warn-bg);color:var(--warn)">${noManager} personelin müdürü eşleşmedi. "Yönetim" menüsünden atayabilirsiniz.</div>` : ""}
     <div class="toolbar">
@@ -829,6 +868,19 @@ function renderAdmin() {
     </div>
   </div>`;
   wireTopbar();
+
+  el("#statHavuz").addEventListener("click", () => openStatListDrawer(
+    "Yetenek Havuzuna Alınmalı (Evet)",
+    employeesCache.filter((e) => evaluationsMap[e.id]?.yetenekHavuzuAlinmali === "Evet")
+  ));
+  el("#statLiderlik").addEventListener("click", () => openStatListDrawer(
+    "Liderlik Potansiyeli (Var)",
+    employeesCache.filter((e) => evaluationsMap[e.id]?.liderlikPotansiyeli === "Var")
+  ));
+  el("#statFonksiyonel").addEventListener("click", () => openStatListDrawer(
+    "Fonksiyonel Geçişe Uygun (Evet)",
+    employeesCache.filter((e) => evaluationsMap[e.id]?.fonksiyonelGecisUygun === "Evet")
+  ));
 
   function draw() {
     const term = el("#searchBox").value.trim().toLocaleLowerCase("tr");
