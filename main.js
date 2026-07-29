@@ -93,6 +93,32 @@ function formatKidem(kurumKidemiYil) {
 }
 
 // ---------------------------------------------------------------
+// UI kit: avatars, sidebar icons
+// ---------------------------------------------------------------
+const AVATAR_COLORS = ["#233047", "#a9772c", "#3d7a52", "#6b4fa0", "#1f7a8c", "#a13030", "#4a5568", "#8a5a2b"];
+function avatarHtml(name, size) {
+  size = size || 34;
+  const n = (name || "?").trim();
+  const initials = n.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toLocaleUpperCase("tr") || "?";
+  let hash = 0;
+  for (let i = 0; i < n.length; i++) hash = (hash * 31 + n.charCodeAt(i)) >>> 0;
+  const color = AVATAR_COLORS[hash % AVATAR_COLORS.length];
+  return `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px;background:${color}">${initials}</span>`;
+}
+
+const ICONS = {
+  grid: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5" fill="currentColor"/><rect x="13" y="3" width="8" height="8" rx="1.5" fill="currentColor" opacity=".55"/><rect x="3" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".55"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".85"/></svg>`,
+  people: `<svg width="16" height="16" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4" fill="currentColor"/><path d="M2.5 20c0-4 3-6.5 6.5-6.5s6.5 2.5 6.5 6.5" fill="currentColor" opacity=".85"/><circle cx="17.5" cy="8.5" r="2.6" fill="currentColor" opacity=".55"/><path d="M14.8 13.9c1-.6 2.1-.9 3-.9 2.8 0 5 2 5.2 5" fill="currentColor" opacity=".55"/></svg>`,
+  gear: `<svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 15.4a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8Z" fill="currentColor"/><path d="M19.4 13.6l1.7-1-2-3.4-1.9.7a6.9 6.9 0 0 0-1.5-.9l-.3-2h-4l-.3 2a6.9 6.9 0 0 0-1.5.9l-1.9-.7-2 3.4 1.7 1a7 7 0 0 0 0 1.7l-1.7 1 2 3.4 1.9-.7c.4.4 1 .7 1.5.9l.3 2h4l.3-2c.5-.2 1.1-.5 1.5-.9l1.9.7 2-3.4-1.7-1a7 7 0 0 0 0-1.7Z" fill="currentColor" opacity=".55"/></svg>`
+};
+
+function sidebarHtml(items, activeKey) {
+  return `<div class="sidebar">
+    ${items.map((it) => `<div class="nav-item ${it.key === activeKey ? "active" : ""}" data-nav="${it.key}"><span class="ic">${it.icon}</span>${it.label}</div>`).join("")}
+  </div>`;
+}
+
+// ---------------------------------------------------------------
 // State
 // ---------------------------------------------------------------
 let currentUid = null;
@@ -241,29 +267,34 @@ function renderManager() {
 
   root().innerHTML = `
   ${topbar()}
-  <div class="wrap">
-    <div class="page-head">
-      <div>
-        <h1>Ekibimin Değerlendirmesi</h1>
-        <p>${currentProfile.muduluk} ekibine bağlı ${total} kişi için yetenek havuzu değerlendirmesi.</p>
+  <div class="app-body">
+    ${sidebarHtml([{ key: "ekip", icon: ICONS.people, label: "Ekibim" }], "ekip")}
+    <div class="main-content">
+      <div class="wrap">
+        <div class="page-head">
+          <div>
+            <h1>Ekibimin Değerlendirmesi</h1>
+            <p>${currentProfile.muduluk} ekibine bağlı ${total} kişi için yetenek havuzu değerlendirmesi.</p>
+          </div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-card"><div class="n">${total}</div><div class="l">Toplam Personel</div></div>
+          <div class="stat-card"><div class="n">${done}</div><div class="l">Tamamlandı</div></div>
+          <div class="stat-card"><div class="n">${draft}</div><div class="l">Taslak</div></div>
+          <div class="stat-card"><div class="n">${pending}</div><div class="l">Bekliyor</div></div>
+        </div>
+        <div class="toolbar">
+          <input type="text" id="searchBox" placeholder="İsimle ara…" style="min-width:220px">
+          <select id="statusFilter">
+            <option value="">Tüm Durumlar</option>
+            <option value="tamamlandi">Tamamlandı</option>
+            <option value="taslak">Taslak</option>
+            <option value="bekliyor">Bekliyor</option>
+          </select>
+        </div>
+        <div class="card-list" id="empList"></div>
       </div>
     </div>
-    <div class="stat-row">
-      <div class="stat-card"><div class="n">${total}</div><div class="l">Toplam Personel</div></div>
-      <div class="stat-card"><div class="n">${done}</div><div class="l">Tamamlandı</div></div>
-      <div class="stat-card"><div class="n">${draft}</div><div class="l">Taslak</div></div>
-      <div class="stat-card"><div class="n">${pending}</div><div class="l">Bekliyor</div></div>
-    </div>
-    <div class="toolbar">
-      <input type="text" id="searchBox" placeholder="İsimle ara…" style="min-width:220px">
-      <select id="statusFilter">
-        <option value="">Tüm Durumlar</option>
-        <option value="tamamlandi">Tamamlandı</option>
-        <option value="taslak">Taslak</option>
-        <option value="bekliyor">Bekliyor</option>
-      </select>
-    </div>
-    <div class="card-list" id="empList"></div>
   </div>`;
   wireTopbar();
 
@@ -293,9 +324,12 @@ function renderManager() {
     const stLabel = st === "tamamlandi" ? "Tamamlandı" : st === "taslak" ? "Taslak" : "Bekliyor";
     return `
     <div class="emp-card" id="card-${e.id}" style="cursor:pointer">
-      <div class="main">
-        <b>${e.adSoyad}</b>
-        <div class="meta">${e.mevcutUnvan || ""} · ${e.departman || ""} / ${e.bolum || ""}</div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        ${avatarHtml(e.adSoyad, 36)}
+        <div class="main">
+          <b>${e.adSoyad}</b>
+          <div class="meta">${e.mevcutUnvan || ""} · ${e.departman || ""} / ${e.bolum || ""}</div>
+        </div>
       </div>
       <span class="status-badge status-${st}">${stLabel}</span>
     </div>`;
@@ -332,9 +366,13 @@ function openEvalDrawer(emp) {
   overlay.innerHTML = `
     <div class="drawer">
       <div class="drawer-head">
-        <div>
-          <h2>${emp.adSoyad}</h2>
-          <div class="meta">${emp.mevcutUnvan || ""} · ${emp.departman || ""} / ${emp.bolum || ""} · Kurum kıdemi bilgisi personel kayıtlarından alınır</div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          ${avatarHtml(emp.adSoyad, 38)}
+          <div>
+            <h2>${emp.adSoyad}</h2>
+            <div class="meta">${emp.mevcutUnvan || ""} · ${emp.departman || ""} / ${emp.bolum || ""}</div>
+            <div class="save-status" id="saveStatus"></div>
+          </div>
         </div>
         <button class="close-x" id="closeDrawer">✕</button>
       </div>
@@ -345,13 +383,17 @@ function openEvalDrawer(emp) {
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
-  el("#closeDrawer").onclick = () => overlay.remove();
+  function closeOverlay() {
+    clearTimeout(autosaveTimer);
+    overlay.remove();
+  }
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeOverlay(); });
+  el("#closeDrawer").onclick = closeOverlay;
 
   function segHtml(groupKey, key, label, desc, options, isBool) {
     const val = groupKey ? d[groupKey][key] : d[key];
     return `
-    <div class="comp-row">
+    <div class="comp-row" data-fieldkey="${groupKey ? groupKey + "." + key : key}">
       <div class="q">${label}<br><span style="font-weight:400;color:var(--ink-soft);font-size:12px">${desc}</span></div>
       <div class="seg ${isBool ? "two" : ""}" data-group="${groupKey || ""}" data-key="${key}">
         ${options.map((o) => `<button type="button" data-v="${o.v}" class="${val == o.v ? "active" : ""}">${o.l}</button>`).join("")}
@@ -381,7 +423,7 @@ function openEvalDrawer(emp) {
         ${["Evet", "Hayır"].map((o) => `<button type="button" data-v="${o}" class="${d.yetenekHavuzuAlinmali === o ? "active" : ""}">${o}</button>`).join("")}
       </div>
     </div>
-    <div class="comp-row">
+    <div class="comp-row" data-fieldkey="liderlikPotansiyeli">
       <div class="q">Liderlik Potansiyeli / Ekip Yönetim Potansiyeli</div>
       <div class="seg two" data-key="liderlikPotansiyeli">
         ${["Var", "Yok"].map((o) => `<button type="button" data-v="${o}" class="${d.liderlikPotansiyeli === o ? "active" : ""}">${o}</button>`).join("")}
@@ -454,6 +496,41 @@ function openEvalDrawer(emp) {
   function refresh() {
     el("#drawerBody").innerHTML = bodyHtml();
     wireInteractions();
+    if (attemptedFinal) validateAndHighlight();
+  }
+
+  let attemptedFinal = false;
+  function validateAndHighlight() {
+    document.querySelectorAll(".field-error").forEach((n) => n.classList.remove("field-error"));
+    let firstBad = null;
+    function mark(selector) {
+      const node = document.querySelector(selector);
+      if (node) { if (attemptedFinal) node.classList.add("field-error"); if (!firstBad) firstBad = node; }
+    }
+    POTANSIYEL_FIELDS.forEach(([k]) => { if (!d.potansiyel[k]) mark(`.comp-row[data-fieldkey="potansiyel.${k}"]`); });
+    CEVIKLIK_FIELDS.forEach(([k]) => { if (d.ogrenmeCevikligi[k] === undefined || d.ogrenmeCevikligi[k] === null) mark(`.comp-row[data-fieldkey="ogrenmeCevikligi.${k}"]`); });
+    TEKNIK_FIELDS.forEach(([k]) => { if (!d.teknikHakimiyet[k]) mark(`.comp-row[data-fieldkey="teknikHakimiyet.${k}"]`); });
+    if (!d.liderlikPotansiyeli) mark('.comp-row[data-fieldkey="liderlikPotansiyeli"]');
+    if (!d.hazirOlmaSuresi) mark("#hazirOlmaSuresi");
+    if (!d.ayrilmaRiski) mark("#ayrilmaRiski");
+    if (!d.gerekce || !d.gerekce.trim()) mark("#gerekce");
+    return firstBad;
+  }
+
+  let autosaveTimer = null;
+  function setSaveStatus(state, text) {
+    const s = document.getElementById("saveStatus");
+    if (!s) return;
+    s.className = "save-status " + state;
+    s.textContent = text;
+  }
+  function scheduleAutosave() {
+    setSaveStatus("saving", "Değişiklikler kaydediliyor…");
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      const keepFinal = existing.status === "tamamlandi" && isComplete(d);
+      save(keepFinal ? "tamamlandi" : "taslak", false);
+    }, 1100);
   }
 
   function wireInteractions() {
@@ -469,12 +546,13 @@ function openEvalDrawer(emp) {
           if (group) d[group][key] = v;
           else d[key] = v;
           refresh();
+          scheduleAutosave();
         });
       });
     });
     ["hazirOlmaSuresi", "ayrilmaRiski", "yedekPozisyonlar", "gelisimAlanlari", "fonksiyonelGecisUygun", "fonksiyonelGecisDept", "gerekce"].forEach((id) => {
       const node = document.getElementById(id);
-      if (node) node.addEventListener("input", () => (d[id] = node.value));
+      if (node) node.addEventListener("input", () => { d[id] = node.value; validateAndHighlight(); scheduleAutosave(); });
     });
     const egitimList = document.getElementById("egitimList");
     if (egitimList) {
@@ -486,13 +564,15 @@ function openEvalDrawer(emp) {
           return;
         }
         d.egitimOnerileri = checked;
+        scheduleAutosave();
       });
     }
   }
 
   refresh();
 
-  async function save(status) {
+  async function save(status, close) {
+    if (close === undefined) close = true;
     const der = computeDerived(d);
     const payload = {
       employeeId: emp.id,
@@ -510,16 +590,25 @@ function openEvalDrawer(emp) {
     };
     try {
       await setDoc(doc(db, "evaluations", emp.id), payload, { merge: true });
-      toast(status === "tamamlandi" ? "Değerlendirme tamamlandı olarak kaydedildi." : "Taslak kaydedildi.");
-      overlay.remove();
+      if (close) {
+        toast(status === "tamamlandi" ? "Değerlendirme tamamlandı olarak kaydedildi." : "Taslak kaydedildi.");
+        closeOverlay();
+      } else {
+        const now = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+        setSaveStatus("saved", `Kaydedildi ✓ ${now}`);
+      }
     } catch (e) {
-      toast("Kaydedilemedi: " + e.message);
+      if (close) toast("Kaydedilemedi: " + e.message);
+      else setSaveStatus("error", "Kaydedilemedi: bağlantınızı kontrol edin");
     }
   }
 
   el("#saveDraft").onclick = () => save("taslak");
   el("#saveFinal").onclick = () => {
     if (!isComplete(d)) {
+      attemptedFinal = true;
+      const firstBad = validateAndHighlight();
+      if (firstBad) firstBad.scrollIntoView({ behavior: "smooth", block: "center" });
       toast("Tamamlamak için tüm yetkinlikleri, hazır olma süresini, ayrılma riskini ve gerekçeyi doldurun.");
       return;
     }
@@ -600,9 +689,12 @@ function openAdminDetailDrawer(emp) {
   overlay.innerHTML = `
     <div class="drawer">
       <div class="drawer-head">
-        <div>
-          <h2>${emp.adSoyad}</h2>
-          <div class="meta">${emp.mevcutUnvan || ""} · ${emp.departman || ""} / ${emp.bolum || ""} · Müdür: ${emp.muduluk || "Atanmadı"} · Kıdem: ${formatKidem(emp.kurumKidemiYil)}</div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          ${avatarHtml(emp.adSoyad, 38)}
+          <div>
+            <h2>${emp.adSoyad}</h2>
+            <div class="meta">${emp.mevcutUnvan || ""} · ${emp.departman || ""} / ${emp.bolum || ""} · Müdür: ${emp.muduluk || "Atanmadı"} · Kıdem: ${formatKidem(emp.kurumKidemiYil)}</div>
+          </div>
         </div>
         <button class="close-x" id="closeAdminDrawer">✕</button>
       </div>
@@ -780,9 +872,12 @@ function openStatListDrawer(title, list) {
         <div class="card-list">
           ${sorted.length ? sorted.map((e) => `
             <div class="emp-card" data-id="${e.id}" style="cursor:pointer">
-              <div class="main">
-                <b>${e.adSoyad}</b>
-                <div class="meta">${e.mevcutUnvan || ""} · ${e.departman || ""} / ${e.bolum || ""} · Müdür: ${e.muduluk || "Atanmadı"}</div>
+              <div style="display:flex;align-items:center;gap:12px;">
+                ${avatarHtml(e.adSoyad, 36)}
+                <div class="main">
+                  <b>${e.adSoyad}</b>
+                  <div class="meta">${e.mevcutUnvan || ""} · ${e.departman || ""} / ${e.bolum || ""} · Müdür: ${e.muduluk || "Atanmadı"}</div>
+                </div>
               </div>
             </div>`).join("") : `<div class="empty-state">Bu kritere uyan personel bulunamadı.</div>`}
         </div>
@@ -800,8 +895,180 @@ function openStatListDrawer(title, list) {
 }
 
 // ---------------------------------------------------------------
+// ADMIN: DASHBOARD HELPERS (charts, 9-box banding, print summary)
+// ---------------------------------------------------------------
+function band(v) {
+  if (v >= 3.75) return 2; // Yüksek
+  if (v >= 2.5) return 1;  // Orta
+  return 0;                // Düşük
+}
+const BAND_LABELS = ["Düşük", "Orta", "Yüksek"];
+
+function donutChart(segments, size) {
+  size = size || 132;
+  const total = segments.reduce((a, s) => a + s.value, 0);
+  let acc = 0;
+  const stops = total
+    ? segments.map((s) => {
+        const start = (acc / total) * 360;
+        acc += s.value;
+        const end = (acc / total) * 360;
+        return `${s.color} ${start}deg ${end}deg`;
+      }).join(", ")
+    : "#eef0f4 0deg 360deg";
+  const legend = segments.map((s) => `
+    <div style="display:flex;align-items:center;gap:7px;font-size:12.3px;margin-bottom:6px">
+      <span style="width:10px;height:10px;border-radius:3px;background:${s.color};display:inline-block;flex:none"></span>
+      <span style="flex:1;color:var(--ink-soft)">${s.label}</span>
+      <b style="color:var(--ink)">${s.value}${total ? " · " + Math.round((s.value / total) * 100) + "%" : ""}</b>
+    </div>`).join("");
+  return `
+    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+      <div style="width:${size}px;height:${size}px;border-radius:50%;background:conic-gradient(${stops});position:relative;flex:none">
+        <div style="position:absolute;inset:19%;background:var(--panel);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-direction:column">
+          <div style="font-family:'Source Serif 4',serif;font-size:19px;font-weight:700;color:var(--navy)">${total}</div>
+          <div style="font-size:9px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em">Toplam</div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:130px">${legend}</div>
+    </div>`;
+}
+
+function barListHtml(data) {
+  const max = Math.max(...data.map((d) => d.value), 1);
+  return data.map((d) => `
+    <div class="bar-row">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+        <span style="color:var(--ink)">${d.label}</span>
+        <b style="color:var(--navy)">${d.value}</b>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round((d.value / max) * 100)}%"></div></div>
+    </div>`).join("");
+}
+
+let _jspdfLoadPromise = null;
+function loadJsPDF() {
+  if (window.jspdf) return Promise.resolve();
+  if (_jspdfLoadPromise) return _jspdfLoadPromise;
+  _jspdfLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js";
+    s.onload = () => resolve();
+    s.onerror = () => { _jspdfLoadPromise = null; reject(new Error("PDF kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edin.")); };
+    document.head.appendChild(s);
+  });
+  return _jspdfLoadPromise;
+}
+
+async function downloadExecutivePdf(ctx) {
+  const btn = document.getElementById("printSummary");
+  if (btn) { btn.disabled = true; btn.textContent = "Hazırlanıyor…"; }
+  try {
+    await loadJsPDF();
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: "mm", format: "a4" });
+    const NAVY = [35, 48, 71], BRASS = [169, 119, 44], INK = [28, 37, 48], INKSOFT = [74, 86, 104], LINE = [226, 221, 210];
+    const W = 210, M = 16;
+    let y = 0;
+
+    function header() {
+      pdf.setFillColor(...NAVY); pdf.rect(0, 0, W, 26, "F");
+      pdf.setTextColor(255, 255, 255); pdf.setFont("helvetica", "bold"); pdf.setFontSize(15);
+      pdf.text("Yetenek Havuzu Değerlendirme — Yönetici Özeti", M, 14);
+      pdf.setFont("helvetica", "normal"); pdf.setFontSize(9); pdf.setTextColor(220, 224, 232);
+      pdf.text(`İnciroğlu Otomotiv · İnsan Kaynakları · ${new Date().toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" })}`, M, 21);
+      y = 34;
+    }
+    function sectionTitle(t) {
+      if (y > 262) { pdf.addPage(); y = 20; }
+      pdf.setFillColor(...BRASS); pdf.rect(M, y, W - 2 * M, 7, "F");
+      pdf.setTextColor(255, 255, 255); pdf.setFont("helvetica", "bold"); pdf.setFontSize(10);
+      pdf.text(t.toUpperCase(), M + 3, y + 5);
+      y += 12;
+    }
+    function statTile(x, val, label, w) {
+      pdf.setDrawColor(...LINE); pdf.setFillColor(255, 255, 255);
+      pdf.roundedRect(x, y, w, 18, 2, 2, "FD");
+      pdf.setTextColor(...NAVY); pdf.setFont("helvetica", "bold"); pdf.setFontSize(15);
+      pdf.text(String(val), x + 4, y + 9);
+      pdf.setTextColor(...INKSOFT); pdf.setFont("helvetica", "normal"); pdf.setFontSize(7);
+      pdf.text(label, x + 4, y + 15, { maxWidth: w - 8 });
+    }
+    function tableRow(cols, widths, opts) {
+      opts = opts || {};
+      const rh = opts.h || 6.4;
+      if (y + rh > 285) { pdf.addPage(); y = 20; }
+      if (opts.shade) { pdf.setFillColor(246, 245, 241); pdf.rect(M, y, W - 2 * M, rh, "F"); }
+      pdf.setTextColor(...INK); pdf.setFont("helvetica", opts.bold ? "bold" : "normal"); pdf.setFontSize(8.3);
+      let x = M + 2;
+      cols.forEach((c, i) => { pdf.text(String(c), x, y + rh - 2, { maxWidth: widths[i] - 3 }); x += widths[i]; });
+      pdf.setDrawColor(...LINE); pdf.line(M, y + rh, W - M, y + rh);
+      y += rh;
+    }
+
+    header();
+    const tileW = (W - 2 * M - 3 * 4) / 4;
+    const stats = [
+      [ctx.total, "Toplam Personel"], [ctx.done, "Tamamlandı"], [ctx.draft, "Taslak"], [ctx.total - ctx.done - ctx.draft, "Bekliyor"],
+      [ctx.havuzEvet, "Yetenek Havuzuna Alınmalı"], [ctx.liderlikVar, "Liderlik Potansiyeli"], [ctx.fonksiyonelEvet, "Fonksiyonel Geçişe Uygun"], [ctx.kritikRisk.length, "Kritik Risk"]
+    ];
+    let sx = M;
+    stats.forEach((s, i) => {
+      statTile(sx, s[0], s[1], tileW);
+      sx += tileW + 4;
+      if (i === 3) { sx = M; y += 22; }
+    });
+    y += 26;
+
+    sectionTitle("Departman Dağılımı");
+    const dW = [(W - 2 * M) * 0.7, (W - 2 * M) * 0.3];
+    tableRow(["Departman", "Personel Sayısı"], dW, { bold: true });
+    ctx.deptData.forEach((d, i) => tableRow([d.label, d.value], dW, { shade: i % 2 === 1 }));
+    y += 6;
+
+    sectionTitle("9-Box Yetenek Matrisi (Potansiyel × Teknik Hakimiyet)");
+    const bW = [(W - 2 * M) * 0.34, (W - 2 * M) * 0.34, (W - 2 * M) * 0.32];
+    tableRow(["Potansiyel", "Teknik Hakimiyet", "Kişi Sayısı"], bW, { bold: true });
+    ctx.box9.forEach((c, i) => tableRow([BAND_LABELS[c.p], BAND_LABELS[c.t], c.list.length], bW, { shade: i % 2 === 1 }));
+    y += 6;
+
+    sectionTitle("Kritik Risk — Havuzda ve Ayrılma Riski Yüksek");
+    const kW = [(W - 2 * M) * 0.32, (W - 2 * M) * 0.28, (W - 2 * M) * 0.28, (W - 2 * M) * 0.12];
+    tableRow(["Ad Soyad", "Departman", "Müdür", "Hazır Olma"], kW, { bold: true });
+    if (ctx.kritikRisk.length) {
+      ctx.kritikRisk.forEach((e) => tableRow([e.adSoyad, e.departman || "", e.muduluk || "Atanmadı", ctx.evaluationsMap[e.id]?.hazirOlmaSuresi || "—"], kW, { shade: true }));
+    } else {
+      tableRow(["Kritere uyan personel yok.", "", "", ""], kW, {});
+    }
+
+    pdf.save(`yetenek-havuzu-yonetici-ozeti-${new Date().toISOString().slice(0, 10)}.pdf`);
+  } catch (e) {
+    toast("PDF oluşturulamadı: " + e.message);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = "Yönetici PDF Raporu İndir"; }
+}
+
+// ---------------------------------------------------------------
 // ADMIN VIEW
 // ---------------------------------------------------------------
+const ADMIN_COLUMNS = [
+  { key: "adSoyad", label: "Ad Soyad", get: (e, ev) => e.adSoyad },
+  { key: "departman", label: "Departman", get: (e, ev) => e.departman || "" },
+  { key: "bolum", label: "Bölüm", get: (e, ev) => e.bolum || "" },
+  { key: "kidem", label: "Kıdem", get: (e, ev) => (e.kurumKidemiYil ?? -1) },
+  { key: "status", label: "Durum", get: (e, ev) => ev?.status || "bekliyor" },
+  { key: "ortalamaPotansiyel", label: "Ort. Potansiyel<br>(9 yetkinlik)", get: (e, ev) => (ev?.ortalamaPotansiyel ?? -1) },
+  { key: "ortalamaOgrenmeCevikligi", label: "Öğr. Çevikliği<br>(5 yetkinlik)", get: (e, ev) => (ev?.ortalamaOgrenmeCevikligi ?? -1) },
+  { key: "potansiyelDegerlendirme", label: "Değerlendirme", get: (e, ev) => ev?.potansiyelDegerlendirme || "" },
+  { key: "yetenekHavuzuAlinmali", label: "Yetenek<br>Havuzu", get: (e, ev) => ev?.yetenekHavuzuAlinmali || "" },
+  { key: "liderlikPotansiyeli", label: "Liderlik<br>Potansiyeli", get: (e, ev) => ev?.liderlikPotansiyeli || "" },
+  { key: "teknikHakimiyetOrt", label: "Teknik<br>Hakimiyet", get: (e, ev) => (ev?.teknikHakimiyetOrt ?? -1) },
+  { key: "hazirOlmaSuresi", label: "Hazır Olma<br>Süresi", get: (e, ev) => ev?.hazirOlmaSuresi || "" },
+  { key: "ayrilmaRiski", label: "Ayrılma<br>Riski", get: (e, ev) => ev?.ayrilmaRiski || "" },
+  { key: "fonksiyonelGecisUygun", label: "Fonk. Geçişe<br>Uygun mu", get: (e, ev) => ev?.fonksiyonelGecisUygun || "" },
+  { key: "fonksiyonelGecisDept", label: "Fonk. Geçiş<br>Dept/Rol", get: (e, ev) => ev?.fonksiyonelGecisDept || "" }
+];
+
 function renderAdmin() {
   const total = employeesCache.length;
   const done = employeesCache.filter((e) => evaluationsMap[e.id]?.status === "tamamlandi").length;
@@ -813,17 +1080,70 @@ function renderAdmin() {
   const liderlikVar = Object.values(evaluationsMap).filter((e) => e.liderlikPotansiyeli === "Var").length;
   const fonksiyonelEvet = Object.values(evaluationsMap).filter((e) => e.fonksiyonelGecisUygun === "Evet").length;
 
+  // --- department distribution (top 8 + "Diğer") ---
+  const deptCounts = {};
+  employeesCache.forEach((e) => { const k = e.departman || "Belirtilmemiş"; deptCounts[k] = (deptCounts[k] || 0) + 1; });
+  const deptSorted = Object.entries(deptCounts).sort((a, b) => b[1] - a[1]);
+  const deptTop = deptSorted.slice(0, 8).map(([label, value]) => ({ label, value }));
+  const deptRestTotal = deptSorted.slice(8).reduce((a, [, v]) => a + v, 0);
+  const deptData = deptRestTotal ? [...deptTop, { label: "Diğer", value: deptRestTotal }] : deptTop;
+
+  // --- completion status donut ---
+  const completionSegs = [
+    { label: "Tamamlandı", value: done, color: "var(--good)" },
+    { label: "Taslak", value: draft, color: "var(--warn)" },
+    { label: "Bekliyor", value: total - done - draft, color: "#9aa2ad" }
+  ];
+
+  // --- attrition risk donut (only employees with a recorded risk) ---
+  const riskCounts = { "Düşük": 0, "Orta": 0, "Yüksek": 0 };
+  Object.values(evaluationsMap).forEach((ev) => { if (riskCounts[ev.ayrilmaRiski] !== undefined) riskCounts[ev.ayrilmaRiski]++; });
+  const riskSegs = [
+    { label: "Düşük Risk", value: riskCounts["Düşük"], color: "var(--good)" },
+    { label: "Orta Risk", value: riskCounts["Orta"], color: "var(--warn)" },
+    { label: "Yüksek Risk", value: riskCounts["Yüksek"], color: "var(--bad)" }
+  ];
+
+  // --- 9-box: potential (rows, high→low) x teknik hakimiyet (cols, low→high) ---
+  const box9 = [];
+  for (let p = 2; p >= 0; p--) {
+    for (let t = 0; t <= 2; t++) {
+      const list = employeesCache.filter((e) => {
+        const ev = evaluationsMap[e.id];
+        if (!ev || ev.ortalamaPotansiyel == null || ev.teknikHakimiyetOrt == null) return false;
+        return band(ev.ortalamaPotansiyel) === p && band(ev.teknikHakimiyetOrt) === t;
+      });
+      const tier = p + t;
+      const cls = tier >= 4 ? "good" : tier <= 1 ? "bad" : "warn";
+      box9.push({ p, t, list, cls });
+    }
+  }
+
+  // --- critical retention risk: in talent pool AND high attrition risk ---
+  const kritikRisk = employeesCache
+    .filter((e) => { const ev = evaluationsMap[e.id]; return ev?.yetenekHavuzuAlinmali === "Evet" && ev?.ayrilmaRiski === "Yüksek"; })
+    .sort((a, b) => (evaluationsMap[b.id]?.ortalamaPotansiyel || 0) - (evaluationsMap[a.id]?.ortalamaPotansiyel || 0));
+
+  const summaryCtx = { total, done, draft, havuzEvet, liderlikVar, fonksiyonelEvet, deptData, box9, kritikRisk, evaluationsMap };
+
   root().innerHTML = `
   ${topbar()}
-  <div class="wrap wide">
+  <div class="app-body">
+    ${sidebarHtml([
+      { key: "overview", icon: ICONS.grid, label: "Genel Bakış" },
+      { key: "list", icon: ICONS.people, label: "Personel Listesi" },
+      { key: "manage", icon: ICONS.gear, label: "Yönetim" }
+    ], "overview")}
+    <div class="main-content">
+    <div class="wrap wide">
     <div class="page-head">
       <div>
         <h1>İK Değerlendirme Paneli</h1>
         <p>Tüm müdürlerden gelen yetenek havuzu değerlendirmelerini canlı olarak izleyin.</p>
       </div>
       <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost btn-sm" id="printSummary">Yönetici PDF Raporu İndir</button>
         <button class="btn btn-ghost btn-sm" id="exportCsv">CSV İndir</button>
-        <button class="btn btn-ghost btn-sm" id="manageBtn">Yönetim</button>
       </div>
     </div>
     <div class="stat-row">
@@ -838,36 +1158,103 @@ function renderAdmin() {
       <div class="stat-card" id="statFonksiyonel" style="cursor:pointer"><div class="n">${fonksiyonelEvet}</div><div class="l">Fonksiyonel Geçişe Uygun (Evet)</div></div>
     </div>
     ${noManager ? `<div class="error-box" style="display:block;background:var(--warn-bg);color:var(--warn)">${noManager} personelin müdürü eşleşmedi. "Yönetim" menüsünden atayabilirsiniz.</div>` : ""}
-    <div class="toolbar">
-      <input type="text" id="searchBox" placeholder="İsimle ara…" style="min-width:200px">
-      <select id="managerFilter"><option value="">Tüm Müdürler</option>${managers.map((m) => `<option value="${m}">${m}</option>`).join("")}</select>
-      <select id="deptFilter"><option value="">Tüm Departmanlar</option>${depts.map((m) => `<option value="${m}">${m}</option>`).join("")}</select>
-      <select id="statusFilter">
-        <option value="">Tüm Durumlar</option>
-        <option value="tamamlandi">Tamamlandı</option>
-        <option value="taslak">Taslak</option>
-        <option value="bekliyor">Bekliyor</option>
-      </select>
+
+    <div id="tabOverview">
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>Departman Dağılımı</h3>
+          ${barListHtml(deptData)}
+        </div>
+        <div class="chart-card">
+          <h3>Değerlendirme Tamamlanma Durumu</h3>
+          ${donutChart(completionSegs)}
+        </div>
+        <div class="chart-card">
+          <h3>Ayrılma Riski Dağılımı</h3>
+          ${donutChart(riskSegs)}
+        </div>
+      </div>
+
+      <div class="box9-wrap">
+        <h3 style="margin:0 0 4px">9-Box Yetenek Matrisi</h3>
+        <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft)">Potansiyel × Teknik Hakimiyet (değerlendirmesi girilmiş ${box9.reduce((a, c) => a + c.list.length, 0)} personel dahildir). Bir hücreye tıklayarak kişileri görebilirsiniz.</p>
+        <div class="box9-body">
+          <div class="box9-yaxis">Potansiyel</div>
+          <div>
+            <div class="box9-grid" id="box9Grid">
+              ${box9.map((c, i) => `
+                <div class="box9-cell ${c.cls}" data-idx="${i}">
+                  <div class="n">${c.list.length}</div>
+                  <div class="l">Potansiyel: ${BAND_LABELS[c.p]}<br>Teknik: ${BAND_LABELS[c.t]}</div>
+                </div>`).join("")}
+            </div>
+            <div class="box9-xaxis"><span>Düşük</span><span>Orta</span><span>Yüksek</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="admin-panel">
+        <div class="section-title" style="margin-top:0">Kritik Risk — Havuzda ve Ayrılma Riski Yüksek Olan Personel</div>
+        <div id="kritikRiskList">
+          ${kritikRisk.length ? kritikRisk.map((e) => `
+            <div class="risk-alert-card" data-id="${e.id}" style="cursor:pointer">
+              <div style="display:flex;align-items:center;gap:12px;">
+                ${avatarHtml(e.adSoyad, 34)}
+                <div class="main">
+                  <b>${e.adSoyad}</b>
+                  <div class="meta">${e.mevcutUnvan || ""} · ${e.departman || ""} / ${e.bolum || ""} · Müdür: ${e.muduluk || "Atanmadı"}</div>
+                </div>
+              </div>
+              <span class="status-badge" style="background:var(--bad-bg);color:var(--bad)">Ayrılma Riski Yüksek</span>
+            </div>`).join("") : `<p style="font-size:13px;color:var(--ink-soft);margin:0">Şu anda yetenek havuzunda ve ayrılma riski yüksek olarak işaretlenmiş personel bulunmuyor.</p>`}
+        </div>
+      </div>
     </div>
-    <div class="table-scroll no-x-scroll">
-      <table class="admin-table">
-        <colgroup>
-          <col style="width:10%"><col style="width:6%"><col style="width:6%"><col style="width:7%"><col style="width:8%">
-          <col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:6%"><col style="width:7%">
-          <col style="width:5%"><col style="width:7%"><col style="width:5%"><col style="width:6%"><col style="width:5%">
-        </colgroup>
-        <thead><tr>
-          <th>Ad Soyad</th><th>Departman</th><th>Bölüm</th><th>Kıdem</th><th>Durum</th>
-          <th>Ort. Potansiyel<br>(9 yetkinlik)</th><th>Öğr. Çevikliği<br>(5 yetkinlik)</th>
-          <th>Değerlendirme</th><th>Yetenek<br>Havuzu</th><th>Liderlik<br>Potansiyeli</th>
-          <th>Teknik<br>Hakimiyet</th><th>Hazır Olma<br>Süresi</th><th>Ayrılma<br>Riski</th>
-          <th>Fonk. Geçişe<br>Uygun mu</th><th>Fonk. Geçiş<br>Dept/Rol</th>
-        </tr></thead>
-        <tbody id="tbody"></tbody>
-      </table>
+
+    <div id="tabList" style="display:none">
+      <div class="toolbar">
+        <input type="text" id="searchBox" placeholder="İsimle ara…" style="min-width:200px">
+        <select id="managerFilter"><option value="">Tüm Müdürler</option>${managers.map((m) => `<option value="${m}">${m}</option>`).join("")}</select>
+        <select id="deptFilter"><option value="">Tüm Departmanlar</option>${depts.map((m) => `<option value="${m}">${m}</option>`).join("")}</select>
+        <select id="statusFilter">
+          <option value="">Tüm Durumlar</option>
+          <option value="tamamlandi">Tamamlandı</option>
+          <option value="taslak">Taslak</option>
+          <option value="bekliyor">Bekliyor</option>
+        </select>
+        <select id="riskFilter">
+          <option value="">Tüm Ayrılma Riskleri</option>
+          <option value="Düşük">Düşük</option>
+          <option value="Orta">Orta</option>
+          <option value="Yüksek">Yüksek</option>
+        </select>
+        <select id="readyFilter">
+          <option value="">Tüm Hazır Olma Süreleri</option>
+          <option value="Hazır">Hazır</option>
+          <option value="0-1 yıl">0-1 yıl</option>
+          <option value="1-2 Yıl">1-2 Yıl</option>
+        </select>
+      </div>
+      <div class="table-scroll no-x-scroll">
+        <table class="admin-table">
+          <colgroup>
+            <col style="width:10%"><col style="width:6%"><col style="width:6%"><col style="width:7%"><col style="width:8%">
+            <col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:6%"><col style="width:7%">
+            <col style="width:5%"><col style="width:7%"><col style="width:5%"><col style="width:6%"><col style="width:5%">
+          </colgroup>
+          <thead><tr>
+            ${ADMIN_COLUMNS.map((c) => `<th data-key="${c.key}">${c.label} <span class="sort-ind" data-key="${c.key}"></span></th>`).join("")}
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    </div>
     </div>
   </div>`;
   wireTopbar();
+
+  el("#printSummary").addEventListener("click", () => downloadExecutivePdf(summaryCtx));
 
   el("#statHavuz").addEventListener("click", () => openStatListDrawer(
     "Yetenek Havuzuna Alınmalı (Evet)",
@@ -882,11 +1269,40 @@ function renderAdmin() {
     employeesCache.filter((e) => evaluationsMap[e.id]?.fonksiyonelGecisUygun === "Evet")
   ));
 
+  document.querySelectorAll("#box9Grid .box9-cell").forEach((cell) => {
+    cell.addEventListener("click", () => {
+      const c = box9[Number(cell.dataset.idx)];
+      openStatListDrawer(`9-Box: Potansiyel ${BAND_LABELS[c.p]} / Teknik Hakimiyet ${BAND_LABELS[c.t]}`, c.list);
+    });
+  });
+
+  document.querySelectorAll("#kritikRiskList .risk-alert-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const emp = employeesCache.find((x) => x.id === card.dataset.id);
+      if (emp) openAdminDetailDrawer(emp);
+    });
+  });
+
+  document.querySelectorAll(".sidebar .nav-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      const key = item.dataset.nav;
+      if (key === "manage") { openManagePanel(); return; }
+      document.querySelectorAll(".sidebar .nav-item").forEach((n) => n.classList.toggle("active", n === item));
+      el("#tabOverview").style.display = key === "overview" ? "" : "none";
+      el("#tabList").style.display = key === "list" ? "" : "none";
+    });
+  });
+
+  let sortState = { key: "adSoyad", dir: 1 };
+
   function draw() {
     const term = el("#searchBox").value.trim().toLocaleLowerCase("tr");
     const mgrF = el("#managerFilter").value;
     const deptF = el("#deptFilter").value;
     const stF = el("#statusFilter").value;
+    const riskF = el("#riskFilter").value;
+    const readyF = el("#readyFilter").value;
+    const col = ADMIN_COLUMNS.find((c) => c.key === sortState.key);
     const list = employeesCache
       .filter((e) => e.adSoyad.toLocaleLowerCase("tr").includes(term))
       .filter((e) => !mgrF || e.muduluk === mgrF)
@@ -895,7 +1311,14 @@ function renderAdmin() {
         const st = evaluationsMap[e.id]?.status || "bekliyor";
         return !stF || st === stF;
       })
-      .sort((a, b) => a.adSoyad.localeCompare(b.adSoyad, "tr"));
+      .filter((e) => !riskF || evaluationsMap[e.id]?.ayrilmaRiski === riskF)
+      .filter((e) => !readyF || evaluationsMap[e.id]?.hazirOlmaSuresi === readyF)
+      .sort((a, b) => {
+        const va = col.get(a, evaluationsMap[a.id]);
+        const vb = col.get(b, evaluationsMap[b.id]);
+        const cmp = (typeof va === "number" && typeof vb === "number") ? va - vb : String(va).localeCompare(String(vb), "tr");
+        return sortState.dir * cmp;
+      });
 
     el("#tbody").innerHTML = list.map((e) => {
       const ev = evaluationsMap[e.id];
@@ -926,16 +1349,28 @@ function renderAdmin() {
         if (emp) openAdminDetailDrawer(emp);
       });
     });
+
+    document.querySelectorAll(".sort-ind").forEach((s) => {
+      s.textContent = s.dataset.key === sortState.key ? (sortState.dir === 1 ? "▲" : "▼") : "";
+    });
   }
 
-  ["searchBox", "managerFilter", "deptFilter", "statusFilter"].forEach((id) => {
+  document.querySelectorAll("table.admin-table th[data-key]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      if (sortState.key === key) sortState.dir *= -1;
+      else sortState = { key, dir: 1 };
+      draw();
+    });
+  });
+
+  ["searchBox", "managerFilter", "deptFilter", "statusFilter", "riskFilter", "readyFilter"].forEach((id) => {
     el("#" + id).addEventListener("input", draw);
     el("#" + id).addEventListener("change", draw);
   });
   draw();
 
   el("#exportCsv").addEventListener("click", exportCsv);
-  el("#manageBtn").addEventListener("click", openManagePanel);
 }
 
 function exportCsv() {
