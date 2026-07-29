@@ -84,6 +84,28 @@ function isComplete(d) {
   return pOk && cOk && tOk && d.liderlikPotansiyeli && d.hazirOlmaSuresi && d.ayrilmaRiski && d.gerekce && d.gerekce.trim().length > 0;
 }
 
+function formatKidem(dateStr) {
+  if (!dateStr) return "—";
+  const m = String(dateStr).match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (!m) return "—";
+  const start = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  const now = new Date();
+  if (isNaN(start.getTime()) || start > now) return "—";
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+  let days = now.getDate() - start.getDate();
+  if (days < 0) {
+    months -= 1;
+    const prevMonthLastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    days += prevMonthLastDay;
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  return `${years} yıl ${months} ay ${days} gün`;
+}
+
 // ---------------------------------------------------------------
 // State
 // ---------------------------------------------------------------
@@ -529,6 +551,9 @@ function renderAdmin() {
   const noManager = employeesCache.filter((e) => !e.muduluk).length;
   const managers = Array.from(new Set(employeesCache.map((e) => e.muduluk).filter(Boolean))).sort((a, b) => a.localeCompare(b, "tr"));
   const depts = Array.from(new Set(employeesCache.map((e) => e.departman).filter(Boolean))).sort((a, b) => a.localeCompare(b, "tr"));
+  const havuzEvet = Object.values(evaluationsMap).filter((e) => e.yetenekHavuzuAlinmali === "Evet").length;
+  const liderlikVar = Object.values(evaluationsMap).filter((e) => e.liderlikPotansiyeli === "Var").length;
+  const fonksiyonelEvet = Object.values(evaluationsMap).filter((e) => e.fonksiyonelGecisUygun === "Evet").length;
 
   root().innerHTML = `
   ${topbar()}
@@ -549,6 +574,11 @@ function renderAdmin() {
       <div class="stat-card"><div class="n">${draft}</div><div class="l">Taslak</div></div>
       <div class="stat-card"><div class="n">${total - done - draft}</div><div class="l">Bekliyor</div></div>
     </div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="n">${havuzEvet}</div><div class="l">Yetenek Havuzuna Alınmalı (Evet)</div></div>
+      <div class="stat-card"><div class="n">${liderlikVar}</div><div class="l">Liderlik Potansiyeli (Var)</div></div>
+      <div class="stat-card"><div class="n">${fonksiyonelEvet}</div><div class="l">Fonksiyonel Geçişe Uygun (Evet)</div></div>
+    </div>
     ${noManager ? `<div class="error-box" style="display:block;background:var(--warn-bg);color:var(--warn)">${noManager} personelin müdürü eşleşmedi. "Yönetim" menüsünden atayabilirsiniz.</div>` : ""}
     <div class="toolbar">
       <input type="text" id="searchBox" placeholder="İsimle ara…" style="min-width:200px">
@@ -564,8 +594,11 @@ function renderAdmin() {
     <div class="table-scroll">
       <table>
         <thead><tr>
-          <th>Ad Soyad</th><th>Departman</th><th>Bölüm</th><th>Müdür</th><th>Durum</th>
-          <th>Potansiyel</th><th>Öğr. Çeviklik</th><th>Teknik</th><th>Değerlendirme</th><th>Ayrılma Riski</th><th>Güncelleme</th>
+          <th>Ad Soyad</th><th>Departman</th><th>Bölüm</th><th>Müdür</th><th>Kıdem</th><th>Durum</th>
+          <th>Ortalama Potansiyel<br>(9 yetkinlik ort.)</th><th>Öğrenme Çevikliği<br>(5 yetkinlik ort.)</th>
+          <th>Değerlendirme</th><th>Yetenek Havuzuna<br>Alınmalı</th><th>Liderlik Potansiyeli /<br>Ekip Yönetim Pot.</th>
+          <th>Teknik Hakimiyet</th><th>Hazır Olma<br>Süresi</th><th>Ayrılma Riski</th>
+          <th>Fonksiyonel Geçişe<br>Uygun mu</th><th>Fonksiyonel Geçiş<br>Departman/Rol</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -592,21 +625,25 @@ function renderAdmin() {
       const ev = evaluationsMap[e.id];
       const st = ev?.status || "bekliyor";
       const stLabel = st === "tamamlandi" ? "Tamamlandı" : st === "taslak" ? "Taslak" : "Bekliyor";
-      const upd = ev?.updatedAt?.toDate ? ev.updatedAt.toDate().toLocaleDateString("tr-TR") : "—";
       return `<tr>
         <td><b>${e.adSoyad}</b></td>
         <td>${e.departman || ""}</td>
         <td>${e.bolum || ""}</td>
         <td>${e.muduluk || '<span style="color:var(--bad)">Atanmadı</span>'}</td>
+        <td>${formatKidem(e.iseBaslamaTarihi)}</td>
         <td><span class="status-badge status-${st}">${stLabel}</span></td>
         <td>${ev?.ortalamaPotansiyel ?? "—"}</td>
         <td>${ev ? Math.round((ev.ortalamaOgrenmeCevikligi || 0) * 100) + "%" : "—"}</td>
-        <td>${ev?.teknikHakimiyetOrt ?? "—"}</td>
         <td style="font-size:11.5px">${ev?.potansiyelDegerlendirme || "—"}</td>
+        <td>${ev?.yetenekHavuzuAlinmali || "—"}</td>
+        <td>${ev?.liderlikPotansiyeli || "—"}</td>
+        <td>${ev?.teknikHakimiyetOrt ?? "—"}</td>
+        <td>${ev?.hazirOlmaSuresi || "—"}</td>
         <td>${ev?.ayrilmaRiski || "—"}</td>
-        <td>${upd}</td>
+        <td>${ev?.fonksiyonelGecisUygun || "—"}</td>
+        <td>${ev?.fonksiyonelGecisDept || "—"}</td>
       </tr>`;
-    }).join("") || `<tr><td colspan="11" class="empty-state">Kayıt bulunamadı.</td></tr>`;
+    }).join("") || `<tr><td colspan="16" class="empty-state">Kayıt bulunamadı.</td></tr>`;
   }
 
   ["searchBox", "managerFilter", "deptFilter", "statusFilter"].forEach((id) => {
@@ -620,13 +657,14 @@ function renderAdmin() {
 }
 
 function exportCsv() {
-  const headers = ["Ad Soyad", "Departman", "Bölüm", "Unvan", "Müdür", "Durum", "Ort. Potansiyel", "Öğr. Çeviklik %", "Teknik Ort.", "Değerlendirme", "Hazır Olma Süresi", "Ayrılma Riski", "Yedekleyebileceği Pozisyon", "Gelişim Alanları", "Gerekçe"];
+  const headers = ["Ad Soyad", "Departman", "Bölüm", "Unvan", "Müdür", "Kıdem", "Durum", "Ort. Potansiyel", "Öğr. Çeviklik %", "Teknik Hakimiyet", "Değerlendirme", "Yetenek Havuzuna Alınmalı", "Liderlik Potansiyeli", "Hazır Olma Süresi", "Ayrılma Riski", "Fonksiyonel Geçişe Uygun", "Fonksiyonel Geçiş Departman/Rol", "Yedekleyebileceği Pozisyon", "Gelişim Alanları", "Gerekçe"];
   const rows = employeesCache.map((e) => {
     const ev = evaluationsMap[e.id] || {};
     return [
-      e.adSoyad, e.departman, e.bolum, e.mevcutUnvan, e.muduluk || "",
+      e.adSoyad, e.departman, e.bolum, e.mevcutUnvan, e.muduluk || "", formatKidem(e.iseBaslamaTarihi),
       ev.status || "bekliyor", ev.ortalamaPotansiyel ?? "", ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) : "",
-      ev.teknikHakimiyetOrt ?? "", ev.potansiyelDegerlendirme || "", ev.hazirOlmaSuresi || "", ev.ayrilmaRiski || "",
+      ev.teknikHakimiyetOrt ?? "", ev.potansiyelDegerlendirme || "", ev.yetenekHavuzuAlinmali || "", ev.liderlikPotansiyeli || "",
+      ev.hazirOlmaSuresi || "", ev.ayrilmaRiski || "", ev.fonksiyonelGecisUygun || "", ev.fonksiyonelGecisDept || "",
       ev.yedekPozisyonlar || "", ev.gelisimAlanlari || "", (ev.gerekce || "").replace(/\n/g, " ")
     ];
   });
