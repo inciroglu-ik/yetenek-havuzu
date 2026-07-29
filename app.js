@@ -84,26 +84,12 @@ function isComplete(d) {
   return pOk && cOk && tOk && d.liderlikPotansiyeli && d.hazirOlmaSuresi && d.ayrilmaRiski && d.gerekce && d.gerekce.trim().length > 0;
 }
 
-function formatKidem(dateStr) {
-  if (!dateStr) return "—";
-  const m = String(dateStr).match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-  if (!m) return "—";
-  const start = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-  const now = new Date();
-  if (isNaN(start.getTime()) || start > now) return "—";
-  let years = now.getFullYear() - start.getFullYear();
-  let months = now.getMonth() - start.getMonth();
-  let days = now.getDate() - start.getDate();
-  if (days < 0) {
-    months -= 1;
-    const prevMonthLastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
-    days += prevMonthLastDay;
-  }
-  if (months < 0) {
-    years -= 1;
-    months += 12;
-  }
-  return `${years} yıl ${months} ay ${days} gün`;
+function formatKidem(kurumKidemiYil) {
+  if (kurumKidemiYil === null || kurumKidemiYil === undefined || isNaN(kurumKidemiYil)) return "—";
+  let years = Math.floor(kurumKidemiYil);
+  let months = Math.round((kurumKidemiYil - years) * 12);
+  if (months === 12) { years += 1; months = 0; }
+  return `${years} yıl ${months} ay`;
 }
 
 // ---------------------------------------------------------------
@@ -630,7 +616,7 @@ function renderAdmin() {
         <td>${e.departman || ""}</td>
         <td>${e.bolum || ""}</td>
         <td>${e.muduluk || '<span style="color:var(--bad)">Atanmadı</span>'}</td>
-        <td>${formatKidem(e.iseBaslamaTarihi)}</td>
+        <td>${formatKidem(e.kurumKidemiYil)}</td>
         <td><span class="status-badge status-${st}">${stLabel}</span></td>
         <td>${ev?.ortalamaPotansiyel ?? "—"}</td>
         <td>${ev ? Math.round((ev.ortalamaOgrenmeCevikligi || 0) * 100) + "%" : "—"}</td>
@@ -661,7 +647,7 @@ function exportCsv() {
   const rows = employeesCache.map((e) => {
     const ev = evaluationsMap[e.id] || {};
     return [
-      e.adSoyad, e.departman, e.bolum, e.mevcutUnvan, e.muduluk || "", formatKidem(e.iseBaslamaTarihi),
+      e.adSoyad, e.departman, e.bolum, e.mevcutUnvan, e.muduluk || "", formatKidem(e.kurumKidemiYil),
       ev.status || "bekliyor", ev.ortalamaPotansiyel ?? "", ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) : "",
       ev.teknikHakimiyetOrt ?? "", ev.potansiyelDegerlendirme || "", ev.yetenekHavuzuAlinmali || "", ev.liderlikPotansiyeli || "",
       ev.hazirOlmaSuresi || "", ev.ayrilmaRiski || "", ev.fonksiyonelGecisUygun || "", ev.fonksiyonelGecisDept || "",
