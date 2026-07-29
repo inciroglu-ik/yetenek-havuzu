@@ -620,10 +620,25 @@ function openAdminDetailDrawer(emp) {
 // ---------------------------------------------------------------
 // ADMIN: SINGLE-PERSON STYLED EXCEL REPORT
 // ---------------------------------------------------------------
+let _exceljsLoadPromise = null;
+function loadExcelJS() {
+  if (window.ExcelJS) return Promise.resolve();
+  if (_exceljsLoadPromise) return _exceljsLoadPromise;
+  _exceljsLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js";
+    s.onload = () => resolve();
+    s.onerror = () => { _exceljsLoadPromise = null; reject(new Error("Excel kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edin.")); };
+    document.head.appendChild(s);
+  });
+  return _exceljsLoadPromise;
+}
+
 async function exportSinglePersonExcel(emp, ev) {
   const btn = el("#downloadPersonExcel");
   if (btn) { btn.disabled = true; btn.textContent = "Hazırlanıyor…"; }
   try {
+    await loadExcelJS();
     const wb = new ExcelJS.Workbook();
     wb.creator = "Yetenek Havuzu Değerlendirme";
     const ws = wb.addWorksheet("Değerlendirme", { views: [{ showGridLines: false }] });
