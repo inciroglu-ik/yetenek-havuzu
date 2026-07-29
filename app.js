@@ -528,9 +528,222 @@ function openEvalDrawer(emp) {
 }
 
 // ---------------------------------------------------------------
-// ADMIN VIEW
+// ADMIN: READ-ONLY PERSON DETAIL CARD
 // ---------------------------------------------------------------
-function renderAdmin() {
+function scoreLabelText(v) {
+  const found = SCORE_LABELS.find((s) => s.v === v);
+  return found ? found.l : "—";
+}
+
+function openAdminDetailDrawer(emp) {
+  const ev = evaluationsMap[emp.id];
+
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+
+  function rowHtml(label, value) {
+    return `<div class="comp-row" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+      <div class="q" style="margin:0">${label}</div>
+      <div style="font-weight:700;color:var(--navy);text-align:right">${value ?? "—"}</div>
+    </div>`;
+  }
+
+  function bodyHtml() {
+    if (!ev) {
+      return `<div class="empty-state">Bu personel için henüz bir değerlendirme girilmedi.</div>`;
+    }
+    return `
+    <div class="section-title" style="margin-top:0">Genel</div>
+    ${rowHtml("Yetenek Havuzuna Alınmalı mı?", ev.yetenekHavuzuAlinmali)}
+    ${rowHtml("Liderlik Potansiyeli / Ekip Yönetim Potansiyeli", ev.liderlikPotansiyeli)}
+
+    <div class="section-title">Potansiyel Yetkinlikleri</div>
+    ${POTANSIYEL_FIELDS.map(([k, l]) => rowHtml(l, scoreLabelText(ev.potansiyel?.[k]))).join("")}
+
+    <div class="section-title">Öğrenme Çevikliği</div>
+    ${CEVIKLIK_FIELDS.map(([k, l]) => rowHtml(l, ev.ogrenmeCevikligi?.[k] === true ? "Var" : ev.ogrenmeCevikligi?.[k] === false ? "Yok" : "—")).join("")}
+
+    <div class="section-title">Teknik Hakimiyet</div>
+    ${TEKNIK_FIELDS.map(([k, l]) => rowHtml(l, scoreLabelText(ev.teknikHakimiyet?.[k]))).join("")}
+
+    <div class="summary-box">
+      <div class="row"><span>Ortalama Potansiyel</span><b>${ev.ortalamaPotansiyel ?? "—"} / 5</b></div>
+      <div class="row"><span>Öğrenme Çevikliği Oranı</span><b>${ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) + "%" : "—"}</b></div>
+      <div class="row"><span>Teknik Hakimiyet Ortalaması</span><b>${ev.teknikHakimiyetOrt ?? "—"} / 5</b></div>
+      <div class="verdict ${(ev.potansiyelDegerlendirme || "").includes("GELİŞİM") ? "dev" : "ok"}">${ev.potansiyelDegerlendirme || "—"}</div>
+    </div>
+
+    <div class="section-title">Gelişim ve Planlama</div>
+    ${rowHtml("Hazır Olma Süresi", ev.hazirOlmaSuresi)}
+    ${rowHtml("Ayrılma Riski", ev.ayrilmaRiski)}
+    ${rowHtml("Yedekleyebileceği Pozisyonlar", ev.yedekPozisyonlar)}
+    ${rowHtml("Fonksiyonel Geçişe Uygun mu?", ev.fonksiyonelGecisUygun)}
+    ${rowHtml("Uygun Departman / Rol", ev.fonksiyonelGecisDept)}
+    <div class="comp-row">
+      <div class="q">Gelişim Alanları</div>
+      <div style="font-size:13px;color:var(--ink)">${ev.gelisimAlanlari || "—"}</div>
+    </div>
+    <div class="comp-row">
+      <div class="q">Önerilen Eğitimler</div>
+      <div style="font-size:13px;color:var(--ink)">${(ev.egitimOnerileri && ev.egitimOnerileri.length) ? ev.egitimOnerileri.map((t) => `<span class="tag">${t}</span>`).join(" ") : "—"}</div>
+    </div>
+    <div class="comp-row">
+      <div class="q">Gerekçe</div>
+      <div style="font-size:13px;color:var(--ink);white-space:pre-wrap">${ev.gerekce || "—"}</div>
+    </div>
+    <div class="comp-row">
+      <div class="q">Bilgiyi Giren</div>
+      <div style="font-size:13px;color:var(--ink-soft)">${ev.submittedByName || "—"} · ${ev.updatedAt?.toDate ? ev.updatedAt.toDate().toLocaleDateString("tr-TR") : "—"}</div>
+    </div>`;
+  }
+
+  overlay.innerHTML = `
+    <div class="drawer">
+      <div class="drawer-head">
+        <div>
+          <h2>${emp.adSoyad}</h2>
+          <div class="meta">${emp.mevcutUnvan || ""} · ${emp.departman || ""} / ${emp.bolum || ""} · Müdür: ${emp.muduluk || "Atanmadı"} · Kıdem: ${formatKidem(emp.kurumKidemiYil)}</div>
+        </div>
+        <button class="close-x" id="closeAdminDrawer">✕</button>
+      </div>
+      <div class="drawer-body">${bodyHtml()}</div>
+      <div class="drawer-foot">
+        <button class="btn btn-brass" id="downloadPersonExcel">Excel Raporu İndir</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  el("#closeAdminDrawer").onclick = () => overlay.remove();
+  el("#downloadPersonExcel").onclick = () => exportSinglePersonExcel(emp, ev);
+}
+
+// ---------------------------------------------------------------
+// ADMIN: SINGLE-PERSON STYLED EXCEL REPORT
+// ---------------------------------------------------------------
+async function exportSinglePersonExcel(emp, ev) {
+  const btn = el("#downloadPersonExcel");
+  if (btn) { btn.disabled = true; btn.textContent = "Hazırlanıyor…"; }
+  try {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Yetenek Havuzu Değerlendirme";
+    const ws = wb.addWorksheet("Değerlendirme", { views: [{ showGridLines: false }] });
+    ws.columns = [{ width: 32 }, { width: 46 }];
+
+    const NAVY = "FF233047", BRASS = "FFA9772C", LIGHT = "FFF6F5F1", LINE = "FFE2DDD2";
+    let r = 1;
+
+    function titleRow(text) {
+      ws.mergeCells(r, 1, r, 2);
+      const cell = ws.getCell(r, 1);
+      cell.value = text;
+      cell.font = { size: 16, bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } };
+      cell.alignment = { vertical: "middle", horizontal: "left" };
+      ws.getRow(r).height = 30;
+      r++;
+    }
+    function subtitleRow(text) {
+      ws.mergeCells(r, 1, r, 2);
+      const cell = ws.getCell(r, 1);
+      cell.value = text;
+      cell.font = { size: 11, color: { argb: "FF4A5568" }, italic: true };
+      ws.getRow(r).height = 20;
+      r++;
+    }
+    function sectionRow(text) {
+      r++;
+      ws.mergeCells(r, 1, r, 2);
+      const cell = ws.getCell(r, 1);
+      cell.value = text.toUpperCase();
+      cell.font = { size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BRASS } };
+      cell.alignment = { vertical: "middle" };
+      ws.getRow(r).height = 20;
+      r++;
+    }
+    function dataRow(label, value, opts) {
+      const a = ws.getCell(r, 1), b = ws.getCell(r, 2);
+      a.value = label; b.value = (value === null || value === undefined || value === "") ? "—" : value;
+      a.font = { bold: true, size: 10.5, color: { argb: "FF1C2530" } };
+      b.font = { size: 10.5, color: { argb: "FF1C2530" } };
+      a.alignment = { vertical: "middle", wrapText: true };
+      b.alignment = { vertical: "middle", wrapText: true };
+      [a, b].forEach((c) => {
+        c.border = { bottom: { style: "thin", color: { argb: LINE } } };
+        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: (opts && opts.shade) ? LIGHT : "FFFFFFFF" } };
+      });
+      if (opts && opts.height) ws.getRow(r).height = opts.height;
+      r++;
+    }
+
+    titleRow("Yetenek Havuzu Değerlendirme Raporu");
+    subtitleRow("İnciroğlu Otomotiv · İnsan Kaynakları");
+    r++;
+
+    sectionRow("Personel Bilgileri");
+    let shade = false;
+    dataRow("Ad Soyad", emp.adSoyad, { shade: (shade = !shade) });
+    dataRow("Unvan", emp.mevcutUnvan, { shade: (shade = !shade) });
+    dataRow("Departman / Bölüm", `${emp.departman || ""} / ${emp.bolum || ""}`, { shade: (shade = !shade) });
+    dataRow("Müdür", emp.muduluk || "Atanmadı", { shade: (shade = !shade) });
+    dataRow("Kurum Kıdemi", formatKidem(emp.kurumKidemiYil), { shade: (shade = !shade) });
+    dataRow("Eğitim Durumu", emp.egitimDurumu, { shade: (shade = !shade) });
+    dataRow("Yabancı Dil", emp.yabanciDil, { shade: (shade = !shade) });
+
+    if (!ev) {
+      sectionRow("Değerlendirme Durumu");
+      dataRow("Durum", "Bu personel için henüz değerlendirme girilmedi.", { shade: true, height: 30 });
+    } else {
+      sectionRow("Genel Değerlendirme");
+      shade = false;
+      dataRow("Yetenek Havuzuna Alınmalı mı?", ev.yetenekHavuzuAlinmali, { shade: (shade = !shade) });
+      dataRow("Liderlik Potansiyeli / Ekip Yönetim Potansiyeli", ev.liderlikPotansiyeli, { shade: (shade = !shade) });
+
+      sectionRow("Potansiyel Yetkinlikleri");
+      shade = false;
+      POTANSIYEL_FIELDS.forEach(([k, l]) => dataRow(l, scoreLabelText(ev.potansiyel?.[k]), { shade: (shade = !shade) }));
+
+      sectionRow("Öğrenme Çevikliği");
+      shade = false;
+      CEVIKLIK_FIELDS.forEach(([k, l]) => dataRow(l, ev.ogrenmeCevikligi?.[k] === true ? "Var" : ev.ogrenmeCevikligi?.[k] === false ? "Yok" : "—", { shade: (shade = !shade) }));
+
+      sectionRow("Teknik Hakimiyet");
+      shade = false;
+      TEKNIK_FIELDS.forEach(([k, l]) => dataRow(l, scoreLabelText(ev.teknikHakimiyet?.[k]), { shade: (shade = !shade) }));
+
+      sectionRow("Hesaplanan Sonuçlar");
+      shade = false;
+      dataRow("Ortalama Potansiyel (/5)", ev.ortalamaPotansiyel, { shade: (shade = !shade) });
+      dataRow("Öğrenme Çevikliği Oranı", ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) + "%" : "—", { shade: (shade = !shade) });
+      dataRow("Teknik Hakimiyet Ortalaması (/5)", ev.teknikHakimiyetOrt, { shade: (shade = !shade) });
+      dataRow("Genel Değerlendirme Sonucu", ev.potansiyelDegerlendirme, { shade: (shade = !shade) });
+
+      sectionRow("Gelişim ve Planlama");
+      shade = false;
+      dataRow("Hazır Olma Süresi", ev.hazirOlmaSuresi, { shade: (shade = !shade) });
+      dataRow("Ayrılma Riski", ev.ayrilmaRiski, { shade: (shade = !shade) });
+      dataRow("Yedekleyebileceği Pozisyonlar", ev.yedekPozisyonlar, { shade: (shade = !shade) });
+      dataRow("Fonksiyonel Geçişe Uygun mu?", ev.fonksiyonelGecisUygun, { shade: (shade = !shade) });
+      dataRow("Uygun Departman / Rol", ev.fonksiyonelGecisDept, { shade: (shade = !shade) });
+      dataRow("Gelişim Alanları", ev.gelisimAlanlari, { shade: (shade = !shade), height: 30 });
+      dataRow("Önerilen Eğitimler", (ev.egitimOnerileri || []).join(" · "), { shade: (shade = !shade), height: 30 });
+      dataRow("Gerekçe", ev.gerekce, { shade: (shade = !shade), height: 46 });
+      dataRow("Bilgiyi Giren", `${ev.submittedByName || "—"} (${ev.updatedAt?.toDate ? ev.updatedAt.toDate().toLocaleDateString("tr-TR") : "—"})`, { shade: (shade = !shade) });
+    }
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${emp.adSoyad.replace(/\s+/g, "-")}-degerlendirme-raporu.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    toast("Rapor oluşturulamadı: " + e.message);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = "Excel Raporu İndir"; }
+}
   const total = employeesCache.length;
   const done = employeesCache.filter((e) => evaluationsMap[e.id]?.status === "tamamlandi").length;
   const draft = employeesCache.filter((e) => evaluationsMap[e.id]?.status === "taslak").length;
@@ -577,14 +790,19 @@ function renderAdmin() {
         <option value="bekliyor">Bekliyor</option>
       </select>
     </div>
-    <div class="table-scroll">
-      <table>
+    <div class="table-scroll no-x-scroll">
+      <table class="admin-table">
+        <colgroup>
+          <col style="width:11%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:6%">
+          <col style="width:7%"><col style="width:7%"><col style="width:9%"><col style="width:6%"><col style="width:7%">
+          <col style="width:5%"><col style="width:6%"><col style="width:5%"><col style="width:6%"><col style="width:9%">
+        </colgroup>
         <thead><tr>
-          <th>Ad Soyad</th><th>Departman</th><th>Bölüm</th><th>Müdür</th><th>Kıdem</th><th>Durum</th>
-          <th>Ortalama Potansiyel<br>(9 yetkinlik ort.)</th><th>Öğrenme Çevikliği<br>(5 yetkinlik ort.)</th>
-          <th>Değerlendirme</th><th>Yetenek Havuzuna<br>Alınmalı</th><th>Liderlik Potansiyeli /<br>Ekip Yönetim Pot.</th>
-          <th>Teknik Hakimiyet</th><th>Hazır Olma<br>Süresi</th><th>Ayrılma Riski</th>
-          <th>Fonksiyonel Geçişe<br>Uygun mu</th><th>Fonksiyonel Geçiş<br>Departman/Rol</th>
+          <th>Ad Soyad</th><th>Departman</th><th>Bölüm</th><th>Kıdem</th><th>Durum</th>
+          <th>Ort. Potansiyel<br>(9 yetkinlik)</th><th>Öğr. Çevikliği<br>(5 yetkinlik)</th>
+          <th>Değerlendirme</th><th>Yetenek<br>Havuzu</th><th>Liderlik<br>Potansiyeli</th>
+          <th>Teknik<br>Hakimiyet</th><th>Hazır Olma<br>Süresi</th><th>Ayrılma<br>Riski</th>
+          <th>Fonk. Geçişe<br>Uygun mu</th><th>Fonk. Geçiş<br>Dept/Rol</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -612,15 +830,14 @@ function renderAdmin() {
       const st = ev?.status || "bekliyor";
       const stLabel = st === "tamamlandi" ? "Tamamlandı" : st === "taslak" ? "Taslak" : "Bekliyor";
       return `<tr>
-        <td><b>${e.adSoyad}</b></td>
+        <td><button type="button" class="link-btn person-link" data-id="${e.id}" style="font-weight:700;text-align:left;font-size:inherit;font-family:inherit;color:var(--navy)">${e.adSoyad}</button></td>
         <td>${e.departman || ""}</td>
         <td>${e.bolum || ""}</td>
-        <td>${e.muduluk || '<span style="color:var(--bad)">Atanmadı</span>'}</td>
         <td>${formatKidem(e.kurumKidemiYil)}</td>
         <td><span class="status-badge status-${st}">${stLabel}</span></td>
         <td>${ev?.ortalamaPotansiyel ?? "—"}</td>
         <td>${ev ? Math.round((ev.ortalamaOgrenmeCevikligi || 0) * 100) + "%" : "—"}</td>
-        <td style="font-size:11.5px">${ev?.potansiyelDegerlendirme || "—"}</td>
+        <td style="font-size:10px">${ev?.potansiyelDegerlendirme || "—"}</td>
         <td>${ev?.yetenekHavuzuAlinmali || "—"}</td>
         <td>${ev?.liderlikPotansiyeli || "—"}</td>
         <td>${ev?.teknikHakimiyetOrt ?? "—"}</td>
@@ -629,7 +846,14 @@ function renderAdmin() {
         <td>${ev?.fonksiyonelGecisUygun || "—"}</td>
         <td>${ev?.fonksiyonelGecisDept || "—"}</td>
       </tr>`;
-    }).join("") || `<tr><td colspan="16" class="empty-state">Kayıt bulunamadı.</td></tr>`;
+    }).join("") || `<tr><td colspan="15" class="empty-state">Kayıt bulunamadı.</td></tr>`;
+
+    document.querySelectorAll(".person-link").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const emp = employeesCache.find((x) => x.id === btn.dataset.id);
+        if (emp) openAdminDetailDrawer(emp);
+      });
+    });
   }
 
   ["searchBox", "managerFilter", "deptFilter", "statusFilter"].forEach((id) => {
