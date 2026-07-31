@@ -2,7 +2,7 @@ import { app, firebaseConfig, LOGIN_DOMAIN } from "./firebase-config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword, EmailAuthProvider, reauthenticateWithCredential, updatePassword
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, collection, onSnapshot, query,
@@ -246,6 +246,7 @@ function topbar() {
     <div class="who">
       <span class="pill">${isAdmin ? "İK / Admin" : "Müdür"}</span>
       <span><b>${currentProfile.adSoyad}</b></span>
+      <button class="btn btn-ghost btn-sm" id="pwBtn">Şifre Değiştir</button>
       <button class="btn btn-ghost btn-sm" id="logoutBtn">Çıkış</button>
     </div>
   </div>`;
@@ -253,6 +254,59 @@ function topbar() {
 
 function wireTopbar() {
   el("#logoutBtn").addEventListener("click", () => signOut(auth));
+  el("#pwBtn").addEventListener("click", () => openPasswordModal());
+}
+
+// ---------------------------------------------------------------
+// ŞİFRE DEĞİŞTİR (Firebase Auth üzerinden — gerçek, güvenli şifre değişimi)
+// Not: hesaplar sahte bir e-posta alan adı kullandığı için Firebase'in
+// "şifremi unuttum" e-posta akışı burada çalışmaz (gidecek gerçek kutu yok).
+// Bu yüzden yalnızca MEVCUT şifreyi bilen kişi kendi şifresini değiştirebilir;
+// tamamen unutulan bir şifre için tek yol Firebase konsolundan admin sıfırlamasıdır.
+// ---------------------------------------------------------------
+function openPasswordModal() {
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="drawer" style="width:min(420px,100%)">
+      <div class="drawer-head">
+        <div><h2>Şifre Değiştir</h2><div class="meta">${currentProfile.adSoyad}</div></div>
+        <button class="close-x" id="closePwModal">✕</button>
+      </div>
+      <div class="drawer-body">
+        <div class="field"><label>Mevcut Şifre</label><input type="password" id="pwCur"></div>
+        <div class="field"><label>Yeni Şifre</label><input type="password" id="pwNew1" placeholder="en az 6 karakter"></div>
+        <div class="field"><label>Yeni Şifre (Tekrar)</label><input type="password" id="pwNew2"></div>
+        <div id="pwMsg" style="font-size:12.5px;margin-top:6px"></div>
+      </div>
+      <div class="drawer-foot">
+        <button class="btn btn-ghost" id="pwVazgec">Vazgeç</button>
+        <button class="btn btn-brass" id="pwKaydet">Kaydet</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  el("#closePwModal").onclick = () => overlay.remove();
+  el("#pwVazgec").onclick = () => overlay.remove();
+  el("#pwKaydet").onclick = async () => {
+    const cur = el("#pwCur").value, n1 = el("#pwNew1").value, n2 = el("#pwNew2").value;
+    const msg = el("#pwMsg");
+    if (!cur) { msg.innerHTML = '<span style="color:var(--bad)">Mevcut şifrenizi girin.</span>'; return; }
+    if (!n1 || n1.length < 6) { msg.innerHTML = '<span style="color:var(--bad)">Yeni şifre en az 6 karakter olmalı.</span>'; return; }
+    if (n1 !== n2) { msg.innerHTML = '<span style="color:var(--bad)">Yeni şifreler birbiriyle uyuşmuyor.</span>'; return; }
+    const btn = el("#pwKaydet");
+    btn.disabled = true; btn.textContent = "Kaydediliyor…";
+    try {
+      const cred = EmailAuthProvider.credential(auth.currentUser.email, cur);
+      await reauthenticateWithCredential(auth.currentUser, cred);
+      await updatePassword(auth.currentUser, n1);
+      msg.innerHTML = '<span style="color:var(--good)">✓ Şifre güncellendi.</span>';
+      setTimeout(() => overlay.remove(), 1200);
+    } catch (e) {
+      msg.innerHTML = '<span style="color:var(--bad)">' + (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential" ? "Mevcut şifre hatalı." : "Hata: " + e.message) + '</span>';
+      btn.disabled = false; btn.textContent = "Kaydet";
+    }
+  };
 }
 
 // ---------------------------------------------------------------
