@@ -136,6 +136,7 @@ const DEF_DONEMLER = (typeof DONEMLER !== "undefined") ? DONEMLER : [DEF_ESKI, D
 let aktifDonem = DEF_AKTIF;     // düzenlemeye açık dönem
 let donemList = DEF_DONEMLER;   // seçilebilir dönemler
 let viewDonem = DEF_AKTIF;      // ekranda görüntülenen dönem
+const DONEM_AYAR_ID = "_ayar_donem"; // "managers" koleksiyonunda dönem ayar dokümanı (uid ile çakışmaz)
 
 // Bir değerlendirme dokümanının ait olduğu dönem (eski kayıtlarda alan yoksa ESKİ sayılır)
 function evalDonem(ev) { return ev.donem || DEF_ESKI; }
@@ -214,22 +215,23 @@ onAuthStateChanged(auth, async (user) => {
   }
   currentUid = user.uid;
   try {
-    // Dönem ayarlarını yükle (yoksa donem-data.js varsayılanları)
+    // Dönem ayarları — mevcut (izinli) "managers" koleksiyonunda saklanır (yeni koleksiyon kural gerektirir)
     try {
-      const cfg = await getDoc(doc(db, "settings", "genel"));
+      const cfg = await getDoc(doc(db, "managers", DONEM_AYAR_ID));
       if (cfg.exists()) {
         const c = cfg.data();
         if (c.aktifDonem) aktifDonem = c.aktifDonem;
         if (Array.isArray(c.donemler) && c.donemler.length) donemList = c.donemler;
       }
-    } catch (e) { console.warn("settings okunamadı", e); }
+    } catch (e) { console.warn("dönem ayarı okunamadı", e); }
     viewDonem = aktifDonem;
 
-    // Yetki: önce profiles/{username} (yeni model), yoksa managers/{uid} (eski model)
+    // Yetki: önce managers/{username} (yeni profil), yoksa managers/{uid} (eski model)
     const username = (user.email || "").split("@")[0].toLowerCase();
     let prof = null;
-    const pSnap = await getDoc(doc(db, "profiles", username));
-    if (pSnap.exists()) {
+    let pSnap = null;
+    try { pSnap = await getDoc(doc(db, "managers", username)); } catch (e) { console.warn("profil okunamadı", e); }
+    if (pSnap && pSnap.exists() && pSnap.data().profil === true) {
       const d = pSnap.data();
       prof = {
         isAdmin: !!d.isAdmin,
@@ -1732,26 +1734,29 @@ function openManagePanel() {
       evSnap.forEach((d) => { if (!d.data().donem) evOps.push((b) => b.set(doc(db, "evaluations", d.id), { donem: DEF_ESKI }, { merge: true })); });
       await commitChunks(evOps);
 
-      // 2) Yeni roster (tam liste; eskiden kalan, listede olmayan personel silinir)
+      // 2) Yeni roster (tam liste). Önce yükle (mutlaka), sonra listede olmayan eskileri sil (opsiyonel).
       msg.textContent = "2/4 Yeni personel listesi yükleniyor…";
       const yeniIds = new Set(ROSTER_2026.map((e) => e.id));
-      const rOps = ROSTER_2026.map((emp) => (b) => b.set(doc(db, "employees", emp.id), emp));
-      const empSnap = await getDocs(collection(db, "employees"));
-      empSnap.forEach((d) => { if (!yeniIds.has(d.id)) rOps.push((b) => b.delete(doc(db, "employees", d.id))); });
-      await commitChunks(rOps);
+      await commitChunks(ROSTER_2026.map((emp) => (b) => b.set(doc(db, "employees", emp.id), emp)));
+      try {
+        const empSnap = await getDocs(collection(db, "employees"));
+        const delOps = [];
+        empSnap.forEach((d) => { if (!yeniIds.has(d.id)) delOps.push((b) => b.delete(doc(db, "employees", d.id))); });
+        if (delOps.length) await commitChunks(delOps);
+      } catch (e) { console.warn("eski personel silinemedi (opsiyonel)", e); }
 
-      // 3) Yetki tanımları (profiles/{username}) — uid gerektirmez, güncellenebilir
+      // 3) Yetki tanımları — managers/{username} (izinli koleksiyon; uid ile çakışmaz)
       msg.textContent = "3/4 Yetki tanımları yazılıyor…";
-      const pOps = HESAPLAR.map((h) => (b) => b.set(doc(db, "profiles", h.username), {
-        adSoyad: h.adSoyad, username: h.username,
+      const pOps = HESAPLAR.map((h) => (b) => b.set(doc(db, "managers", h.username), {
+        profil: true, adSoyad: h.adSoyad, username: h.username, role: "manager",
         muduluk: h.muduluk || null, direktorluk: h.direktorluk || null,
         roller: h.roller || [], isAdmin: false, updatedAt: serverTimestamp()
       }, { merge: true }));
       await commitChunks(pOps);
 
-      // 4) settings
+      // 4) Dönem ayarı — managers/_ayar_donem
       msg.textContent = "4/4 Dönem ayarı kaydediliyor…";
-      await setDoc(doc(db, "settings", "genel"), { aktifDonem: DEF_AKTIF, donemler: DEF_DONEMLER, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, "managers", DONEM_AYAR_ID), { aktifDonem: DEF_AKTIF, donemler: DEF_DONEMLER, updatedAt: serverTimestamp() }, { merge: true });
       aktifDonem = DEF_AKTIF; donemList = DEF_DONEMLER; viewDonem = DEF_AKTIF;
 
       msg.style.color = "var(--good)";
@@ -1891,7 +1896,8 @@ function openManagePanel() {
   async function drawAccounts() {
     const qs = await getDocs(collection(db, "managers"));
     const rows = [];
-    qs.forEach((d) => rows.push({ id: d.id, ...d.data() }));
+    qs.forEach((d) => { if (d.id !== DONEM_AYAR_ID) rows.push({ id: d.id, ...d.data() }); });
+    rows.sort((a, b) => (a.adSoyad || "").localeCompare(b.adSoyad || "", "tr"));
     el("#mgrAccountsList").innerHTML = rows.length
       ? `<table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Rol</th><th>Müdürlük</th></tr></thead><tbody>
           ${rows.map((r) => `<tr><td>${r.adSoyad || ""}</td><td>${r.username || ""}</td><td>${r.role}</td><td>${r.muduluk || "—"}</td></tr>`).join("")}
