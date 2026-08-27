@@ -122,11 +122,83 @@ function sidebarHtml(items, activeKey) {
 // State
 // ---------------------------------------------------------------
 let currentUid = null;
-let currentProfile = null; // { role, adSoyad, muduluk, username }
+let currentProfile = null; // { isAdmin, adSoyad, muduluk, direktorluk, roller, username }
 let employeesCache = [];   // from Firestore 'employees'
-let evaluationsMap = {};   // employeeId -> evaluation doc
+let allEvalsMap = {};      // docId -> evaluation doc (tüm dönemler)
+let evaluationsMap = {};   // employeeId -> evaluation doc (SEÇİLİ dönem)
 let unsubEval = null;
 let unsubEmp = null;
+
+// --- Dönem durumu ---
+const DEF_AKTIF = (typeof AKTIF_DONEM !== "undefined") ? AKTIF_DONEM : "3. Çeyrek Sonu";
+const DEF_ESKI = (typeof ESKI_DONEM !== "undefined") ? ESKI_DONEM : "2. Çeyrek Sonu";
+const DEF_DONEMLER = (typeof DONEMLER !== "undefined") ? DONEMLER : [DEF_ESKI, DEF_AKTIF];
+let aktifDonem = DEF_AKTIF;     // düzenlemeye açık dönem
+let donemList = DEF_DONEMLER;   // seçilebilir dönemler
+let viewDonem = DEF_AKTIF;      // ekranda görüntülenen dönem
+
+// Bir değerlendirme dokümanının ait olduğu dönem (eski kayıtlarda alan yoksa ESKİ sayılır)
+function evalDonem(ev) { return ev.donem || DEF_ESKI; }
+
+// Seçili döneme (viewDonem) göre evaluationsMap'i yeniden kur (employeeId -> ev)
+function rebuildEvalMap() {
+  evaluationsMap = {};
+  Object.values(allEvalsMap).forEach((ev) => {
+    if (evalDonem(ev) !== viewDonem) return;
+    const key = ev.employeeId || ev.id;
+    evaluationsMap[key] = ev;
+  });
+}
+
+// Düzenleme yapılabilir mi? (sadece aktif dönem düzenlenebilir)
+function isDuzenlenebilir() { return viewDonem === aktifDonem; }
+
+// ---------------------------------------------------------------
+// Rol / kapsam yardımcıları (müdür + direktör)
+// ---------------------------------------------------------------
+function profilRolleri(p) {
+  if (!p) return [];
+  if (Array.isArray(p.roller) && p.roller.length) return p.roller;
+  if (p.isAdmin || p.role === "admin") return ["admin"];
+  const r = [];
+  if (p.muduluk) r.push("manager");
+  if (p.direktorluk) r.push("direktor");
+  if (!r.length) r.push("manager");
+  return r;
+}
+// Müdür olarak değerlendireceği personel (kendisi hariç)
+function mudurEkibi(p) {
+  if (!p.muduluk) return [];
+  return employeesCache.filter((e) => e.muduluk === p.muduluk && e.adSoyad !== p.muduluk);
+}
+// Direktör olarak değerlendireceği müdürler (altındaki, müdürlük sütununda kendi adı olanlar)
+function direktorMudurleri(p) {
+  if (!p.direktorluk) return [];
+  return employeesCache.filter((e) => e.direktor === p.direktorluk && e.muduluk === e.adSoyad);
+}
+// Direktörün SADECE görüntüleyebileceği (düzenleyemez) personel: altındaki müdürlerin ekipleri
+function direktorGorunen(p) {
+  if (!p.direktorluk) return [];
+  const duzenlenebilirIds = new Set(direktorMudurleri(p).map((e) => e.id));
+  return employeesCache.filter((e) => e.direktor === p.direktorluk && !duzenlenebilirIds.has(e.id));
+}
+
+// Bir değerlendirme kaydından "personel benzeri" nesne üret (eski dönem görüntüleme için)
+function evToEmp(ev) {
+  return { id: ev.employeeId || ev.id, adSoyad: ev.adSoyad, mevcutUnvan: ev.unvan, departman: ev.departman, bolum: ev.bolum, muduluk: ev.muduluk, kurumKidemiYil: null };
+}
+// Id ile personel bul: önce güncel roster, yoksa seçili dönemin kayıtlarından
+function findEmpById(id) {
+  const inRoster = employeesCache.find((e) => e.id === id);
+  if (inRoster) return inRoster;
+  const ev = evaluationsMap[id];
+  return ev ? evToEmp(ev) : null;
+}
+// Admin görünümünde seçili döneme göre personel kümesi
+function adminRoster() {
+  if (isDuzenlenebilir()) return employeesCache;
+  return Object.values(evaluationsMap).map(evToEmp);
+}
 
 // ---------------------------------------------------------------
 // Auth
@@ -142,13 +214,51 @@ onAuthStateChanged(auth, async (user) => {
   }
   currentUid = user.uid;
   try {
-    const snap = await getDoc(doc(db, "managers", user.uid));
-    if (!snap.exists()) {
+    // Dönem ayarlarını yükle (yoksa donem-data.js varsayılanları)
+    try {
+      const cfg = await getDoc(doc(db, "settings", "genel"));
+      if (cfg.exists()) {
+        const c = cfg.data();
+        if (c.aktifDonem) aktifDonem = c.aktifDonem;
+        if (Array.isArray(c.donemler) && c.donemler.length) donemList = c.donemler;
+      }
+    } catch (e) { console.warn("settings okunamadı", e); }
+    viewDonem = aktifDonem;
+
+    // Yetki: önce profiles/{username} (yeni model), yoksa managers/{uid} (eski model)
+    const username = (user.email || "").split("@")[0].toLowerCase();
+    let prof = null;
+    const pSnap = await getDoc(doc(db, "profiles", username));
+    if (pSnap.exists()) {
+      const d = pSnap.data();
+      prof = {
+        isAdmin: !!d.isAdmin,
+        adSoyad: d.adSoyad || username,
+        muduluk: d.muduluk || null,
+        direktorluk: d.direktorluk || null,
+        roller: d.roller || null,
+        username
+      };
+    } else {
+      const mSnap = await getDoc(doc(db, "managers", user.uid));
+      if (mSnap.exists()) {
+        const d = mSnap.data();
+        prof = {
+          isAdmin: d.role === "admin",
+          adSoyad: d.adSoyad || username,
+          muduluk: d.muduluk || null,
+          direktorluk: d.direktorluk || null,
+          roller: d.roller || null,
+          username: d.username || username
+        };
+      }
+    }
+    if (!prof) {
       renderLogin("Bu hesap sisteme tanımlı değil. Lütfen yöneticinizle (İK) iletişime geçin.");
       await signOut(auth);
       return;
     }
-    currentProfile = snap.data();
+    currentProfile = prof;
     subscribeEmployees();
   } catch (e) {
     console.error(e);
@@ -166,20 +276,26 @@ function subscribeEmployees() {
 
 function subscribeEvaluations() {
   if (unsubEval) unsubEval();
-  const isAdmin = currentProfile.role === "admin";
-  const q = isAdmin
-    ? collection(db, "evaluations")
-    : query(collection(db, "evaluations"), where("muduluk", "==", currentProfile.muduluk));
-  unsubEval = onSnapshot(q, (qs) => {
-    evaluationsMap = {};
-    qs.forEach((d) => (evaluationsMap[d.id] = { id: d.id, ...d.data() }));
+  // Tüm değerlendirmeler çekilir; dönem + kapsam istemci tarafında filtrelenir.
+  // (Eski dönem herkese görünür olmalı; direktör kapsamı tek bir müdürlükle sınırlı değil.)
+  unsubEval = onSnapshot(collection(db, "evaluations"), (qs) => {
+    allEvalsMap = {};
+    qs.forEach((d) => (allEvalsMap[d.id] = { id: d.id, ...d.data() }));
+    rebuildEvalMap();
     render();
   }, (err) => console.error(err));
 }
 
 function render() {
-  if (currentProfile.role === "admin") renderAdmin();
+  if (currentProfile.isAdmin) renderAdmin();
   else renderManager();
+}
+
+// Dönem değiştir (üst çubuktaki seçici)
+function setViewDonem(d) {
+  viewDonem = d;
+  rebuildEvalMap();
+  render();
 }
 
 // ---------------------------------------------------------------
@@ -235,16 +351,33 @@ function renderLogin(errMsg) {
 // ---------------------------------------------------------------
 // TOPBAR (shared)
 // ---------------------------------------------------------------
+function rolEtiketi() {
+  const r = profilRolleri(currentProfile);
+  if (r.includes("admin")) return "İK / Admin";
+  const parts = [];
+  if (r.includes("direktor")) parts.push("Direktör");
+  if (r.includes("manager")) parts.push("Müdür");
+  return parts.join(" · ") || "Müdür";
+}
+
+function donemSelectorHtml() {
+  if (!donemList || donemList.length < 2) return "";
+  return `<select id="donemSel" class="donem-sel" title="Dönem seçin">
+    ${donemList.map((d) => `<option value="${d}" ${d === viewDonem ? "selected" : ""}>${d}${d === aktifDonem ? " (Aktif)" : ""}</option>`).join("")}
+  </select>`;
+}
+
 function topbar() {
-  const isAdmin = currentProfile.role === "admin";
+  const isAdmin = currentProfile.isAdmin;
   return `
   <div class="topbar">
     <div class="brand">
       <div class="mark">İH</div>
-      <div class="t">Yetenek Havuzu<small>${isAdmin ? "İK Değerlendirme Paneli" : "Müdür Değerlendirme Ekranı"}</small></div>
+      <div class="t">Yetenek Havuzu<small>${isAdmin ? "İK Değerlendirme Paneli" : "Değerlendirme Ekranı"}</small></div>
     </div>
     <div class="who">
-      <span class="pill">${isAdmin ? "İK / Admin" : "Müdür"}</span>
+      ${donemSelectorHtml()}
+      <span class="pill">${rolEtiketi()}</span>
       <span><b>${currentProfile.adSoyad}</b></span>
       <button class="btn btn-ghost btn-sm" id="pwBtn">Şifre Değiştir</button>
       <button class="btn btn-ghost btn-sm" id="logoutBtn">Çıkış</button>
@@ -255,6 +388,8 @@ function topbar() {
 function wireTopbar() {
   el("#logoutBtn").addEventListener("click", () => signOut(auth));
   el("#pwBtn").addEventListener("click", () => openPasswordModal());
+  const ds = el("#donemSel");
+  if (ds) ds.addEventListener("change", () => setViewDonem(ds.value));
 }
 
 // ---------------------------------------------------------------
@@ -312,31 +447,74 @@ function openPasswordModal() {
 // ---------------------------------------------------------------
 // MANAGER VIEW
 // ---------------------------------------------------------------
+// Seçili döneme göre bu kullanıcının göreceği personel listeleri
+function kapsamListeleri() {
+  const p = currentProfile;
+  const roles = profilRolleri(p);
+  const aktif = isDuzenlenebilir();
+
+  if (aktif) {
+    // AKTİF DÖNEM: güncel roster üzerinden
+    const editMap = new Map();
+    if (roles.includes("manager")) mudurEkibi(p).forEach((e) => editMap.set(e.id, e));
+    if (roles.includes("direktor")) direktorMudurleri(p).forEach((e) => editMap.set(e.id, e));
+    const readMap = new Map();
+    if (roles.includes("direktor")) direktorGorunen(p).forEach((e) => { if (!editMap.has(e.id)) readMap.set(e.id, e); });
+    return { duzenlenebilir: [...editMap.values()], salt: [...readMap.values()], aktif: true };
+  }
+
+  // ESKİ DÖNEM: o döneme ait değerlendirme kayıtlarından (salt okunur)
+  // Kapsam: kendi müdürlüğü + (direktörse) altındaki müdürlüklerin etiketleri
+  const kapsamMud = new Set();
+  if (p.muduluk) kapsamMud.add(p.muduluk);
+  if (roles.includes("direktor") && p.direktorluk) {
+    employeesCache.filter((e) => e.direktor === p.direktorluk).forEach((e) => { if (e.muduluk) kapsamMud.add(e.muduluk); });
+  }
+  const items = Object.values(evaluationsMap)
+    .filter((ev) => kapsamMud.has(ev.muduluk))
+    .map((ev) => ({ id: ev.employeeId || ev.id, adSoyad: ev.adSoyad, mevcutUnvan: ev.unvan, departman: ev.departman, bolum: ev.bolum, muduluk: ev.muduluk, kurumKidemiYil: null }));
+  return { duzenlenebilir: [], salt: items, aktif: false };
+}
+
 function renderManager() {
-  const myEmployees = employeesCache.filter((e) => e.muduluk === currentProfile.muduluk);
-  const total = myEmployees.length;
-  const done = myEmployees.filter((e) => evaluationsMap[e.id]?.status === "tamamlandi").length;
-  const draft = myEmployees.filter((e) => evaluationsMap[e.id]?.status === "taslak").length;
+  const { duzenlenebilir, salt, aktif } = kapsamListeleri();
+  const total = duzenlenebilir.length;
+  const done = duzenlenebilir.filter((e) => evaluationsMap[e.id]?.status === "tamamlandi").length;
+  const draft = duzenlenebilir.filter((e) => evaluationsMap[e.id]?.status === "taslak").length;
   const pending = total - done - draft;
+  const roles = profilRolleri(currentProfile);
+  const direktorMu = roles.includes("direktor");
+
+  const banner = !aktif
+    ? `<div class="error-box" style="display:block;background:var(--warn-bg);color:var(--warn)"><b>${viewDonem}</b> dönemini görüntülüyorsunuz — bu dönem <b>salt okunur</b>dur, değişiklik yapılamaz. Düzenleme için sağ üstten <b>${aktifDonem} (Aktif)</b> dönemini seçin.</div>`
+    : "";
+
+  const baslik = direktorMu && aktif
+    ? "Değerlendirmelerim"
+    : "Ekibimin Değerlendirmesi";
+  const altYazi = aktif
+    ? `${aktifDonem} dönemi için ${total} kişilik değerlendirme.`
+    : `${viewDonem} döneminde kaydedilen değerlendirmeler (salt okunur).`;
 
   root().innerHTML = `
   ${topbar()}
   <div class="app-body">
-    ${sidebarHtml([{ key: "ekip", icon: ICONS.people, label: "Ekibim" }], "ekip")}
+    ${sidebarHtml([{ key: "ekip", icon: ICONS.people, label: "Değerlendirmeler" }], "ekip")}
     <div class="main-content">
       <div class="wrap">
         <div class="page-head">
           <div>
-            <h1>Ekibimin Değerlendirmesi</h1>
-            <p>${currentProfile.muduluk} ekibine bağlı ${total} kişi için yetenek havuzu değerlendirmesi.</p>
+            <h1>${baslik}</h1>
+            <p>${altYazi}</p>
           </div>
         </div>
-        <div class="stat-row">
-          <div class="stat-card"><div class="n">${total}</div><div class="l">Toplam Personel</div></div>
+        ${banner}
+        ${aktif ? `<div class="stat-row">
+          <div class="stat-card"><div class="n">${total}</div><div class="l">Toplam</div></div>
           <div class="stat-card"><div class="n">${done}</div><div class="l">Tamamlandı</div></div>
           <div class="stat-card"><div class="n">${draft}</div><div class="l">Taslak</div></div>
           <div class="stat-card"><div class="n">${pending}</div><div class="l">Bekliyor</div></div>
-        </div>
+        </div>` : ""}
         <div class="toolbar">
           <input type="text" id="searchBox" placeholder="İsimle ara…" style="min-width:220px">
           <select id="statusFilter">
@@ -346,47 +524,60 @@ function renderManager() {
             <option value="bekliyor">Bekliyor</option>
           </select>
         </div>
+        ${(aktif && direktorMu) ? `<div class="section-title" style="margin-top:4px">Değerlendireceğim Müdürler / Personel</div>` : ""}
         <div class="card-list" id="empList"></div>
+        ${(aktif && direktorMu && salt.length) ? `
+          <div class="section-title" style="margin-top:22px">Müdürlerimin Ekipleri (Görüntüleme)</div>
+          <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px">Bu personeli görüntüleyebilirsiniz; değerlendirmeleri kendi müdürleri doldurur.</p>
+          <div class="card-list" id="viewList"></div>` : ""}
       </div>
     </div>
   </div>`;
   wireTopbar();
 
-  function draw() {
-    const term = el("#searchBox").value.trim().toLocaleLowerCase("tr");
-    const statusF = el("#statusFilter").value;
-    const list = myEmployees
-      .filter((e) => e.adSoyad.toLocaleLowerCase("tr").includes(term))
-      .filter((e) => {
-        const st = evaluationsMap[e.id]?.status || "bekliyor";
-        return !statusF || st === statusF;
-      })
-      .sort((a, b) => a.adSoyad.localeCompare(b.adSoyad, "tr"));
-
-    el("#empList").innerHTML = list.length
-      ? list.map((e) => empCardHtml(e)).join("")
-      : `<div class="empty-state">Aramanızla eşleşen personel bulunamadı.</div>`;
-
-    list.forEach((e) => {
-      document.getElementById("card-" + e.id).addEventListener("click", () => openEvalDrawer(e));
-    });
-  }
-
-  function empCardHtml(e) {
+  function empCardHtml(e, saltOkunur) {
     const ev = evaluationsMap[e.id];
     const st = ev?.status || "bekliyor";
-    const stLabel = st === "tamamlandi" ? "Tamamlandı" : st === "taslak" ? "Taslak" : "Bekliyor";
+    const stLabel = st === "tamamlandi" ? "Tamamlandı" : st === "taslak" ? "Taslak" : (saltOkunur ? "Kayıt yok" : "Bekliyor");
     return `
     <div class="emp-card" id="card-${e.id}" style="cursor:pointer">
       <div style="display:flex;align-items:center;gap:12px;">
         ${avatarHtml(e.adSoyad, 36)}
         <div class="main">
           <b>${e.adSoyad}</b>
-          <div class="meta">${e.mevcutUnvan || ""} · ${e.departman || ""} / ${e.bolum || ""}</div>
+          <div class="meta">${e.mevcutUnvan || ""} · ${e.departman || ""} / ${e.bolum || ""}${e.muduluk ? " · Müdür: " + e.muduluk : ""}</div>
         </div>
       </div>
       <span class="status-badge status-${st}">${stLabel}</span>
     </div>`;
+  }
+
+  function draw() {
+    const term = el("#searchBox").value.trim().toLocaleLowerCase("tr");
+    const statusF = el("#statusFilter").value;
+    const filt = (arr) => arr
+      .filter((e) => (e.adSoyad || "").toLocaleLowerCase("tr").includes(term))
+      .filter((e) => { const st = evaluationsMap[e.id]?.status || "bekliyor"; return !statusF || st === statusF; })
+      .sort((a, b) => (a.adSoyad || "").localeCompare(b.adSoyad || "", "tr"));
+
+    const mainList = aktif ? filt(duzenlenebilir) : filt(salt);
+    el("#empList").innerHTML = mainList.length
+      ? mainList.map((e) => empCardHtml(e, !aktif)).join("")
+      : `<div class="empty-state">${aktif ? "Aramanızla eşleşen personel bulunamadı." : "Bu dönemde kayıt bulunamadı."}</div>`;
+    mainList.forEach((e) => {
+      const node = document.getElementById("card-" + e.id);
+      if (node) node.addEventListener("click", () => aktif ? openEvalDrawer(e) : openAdminDetailDrawer(e));
+    });
+
+    const vl = document.getElementById("viewList");
+    if (vl) {
+      const vList = filt(salt);
+      vl.innerHTML = vList.length ? vList.map((e) => empCardHtml(e, true)).join("") : `<div class="empty-state">Görüntülenecek personel yok.</div>`;
+      vList.forEach((e) => {
+        const node = document.getElementById("card-" + e.id);
+        if (node) node.addEventListener("click", () => openAdminDetailDrawer(e));
+      });
+    }
   }
 
   el("#searchBox").addEventListener("input", draw);
@@ -630,6 +821,7 @@ function openEvalDrawer(emp) {
     const der = computeDerived(d);
     const payload = {
       employeeId: emp.id,
+      donem: aktifDonem,
       adSoyad: emp.adSoyad,
       departman: emp.departman || "",
       bolum: emp.bolum || "",
@@ -643,7 +835,7 @@ function openEvalDrawer(emp) {
       updatedAt: serverTimestamp()
     };
     try {
-      await setDoc(doc(db, "evaluations", emp.id), payload, { merge: true });
+      await setDoc(doc(db, "evaluations", `${aktifDonem}::${emp.id}`), payload, { merge: true });
       if (close) {
         toast(status === "tamamlandi" ? "Değerlendirme tamamlandı olarak kaydedildi." : "Taslak kaydedildi.");
         closeOverlay();
@@ -942,7 +1134,7 @@ function openStatListDrawer(title, list) {
   overlay.querySelector("#closeStatDrawer").onclick = () => overlay.remove();
   overlay.querySelectorAll(".emp-card[data-id]").forEach((card) => {
     card.addEventListener("click", () => {
-      const emp = employeesCache.find((x) => x.id === card.dataset.id);
+      const emp = findEmpById(card.dataset.id);
       if (emp) openAdminDetailDrawer(emp);
     });
   });
@@ -1124,19 +1316,20 @@ const ADMIN_COLUMNS = [
 ];
 
 function renderAdmin() {
-  const total = employeesCache.length;
-  const done = employeesCache.filter((e) => evaluationsMap[e.id]?.status === "tamamlandi").length;
-  const draft = employeesCache.filter((e) => evaluationsMap[e.id]?.status === "taslak").length;
-  const noManager = employeesCache.filter((e) => !e.muduluk).length;
-  const managers = Array.from(new Set(employeesCache.map((e) => e.muduluk).filter(Boolean))).sort((a, b) => a.localeCompare(b, "tr"));
-  const depts = Array.from(new Set(employeesCache.map((e) => e.departman).filter(Boolean))).sort((a, b) => a.localeCompare(b, "tr"));
+  const roster = adminRoster();
+  const total = roster.length;
+  const done = roster.filter((e) => evaluationsMap[e.id]?.status === "tamamlandi").length;
+  const draft = roster.filter((e) => evaluationsMap[e.id]?.status === "taslak").length;
+  const noManager = roster.filter((e) => !e.muduluk).length;
+  const managers = Array.from(new Set(roster.map((e) => e.muduluk).filter(Boolean))).sort((a, b) => a.localeCompare(b, "tr"));
+  const depts = Array.from(new Set(roster.map((e) => e.departman).filter(Boolean))).sort((a, b) => a.localeCompare(b, "tr"));
   const havuzEvet = Object.values(evaluationsMap).filter((e) => e.yetenekHavuzuAlinmali === "Evet").length;
   const liderlikVar = Object.values(evaluationsMap).filter((e) => e.liderlikPotansiyeli === "Var").length;
   const fonksiyonelEvet = Object.values(evaluationsMap).filter((e) => e.fonksiyonelGecisUygun === "Evet").length;
 
   // --- department distribution (top 8 + "Diğer") ---
   const deptCounts = {};
-  employeesCache.forEach((e) => { const k = e.departman || "Belirtilmemiş"; deptCounts[k] = (deptCounts[k] || 0) + 1; });
+  roster.forEach((e) => { const k = e.departman || "Belirtilmemiş"; deptCounts[k] = (deptCounts[k] || 0) + 1; });
   const deptSorted = Object.entries(deptCounts).sort((a, b) => b[1] - a[1]);
   const deptTop = deptSorted.slice(0, 8).map(([label, value]) => ({ label, value }));
   const deptRestTotal = deptSorted.slice(8).reduce((a, [, v]) => a + v, 0);
@@ -1162,7 +1355,7 @@ function renderAdmin() {
   const box9 = [];
   for (let p = 2; p >= 0; p--) {
     for (let t = 0; t <= 2; t++) {
-      const list = employeesCache.filter((e) => {
+      const list = roster.filter((e) => {
         const ev = evaluationsMap[e.id];
         if (!ev || ev.ortalamaPotansiyel == null || ev.teknikHakimiyetOrt == null) return false;
         return band(ev.ortalamaPotansiyel) === p && band(ev.teknikHakimiyetOrt) === t;
@@ -1174,7 +1367,7 @@ function renderAdmin() {
   }
 
   // --- critical retention risk: in talent pool AND high attrition risk ---
-  const kritikRisk = employeesCache
+  const kritikRisk = roster
     .filter((e) => { const ev = evaluationsMap[e.id]; return ev?.yetenekHavuzuAlinmali === "Evet" && ev?.ayrilmaRiski === "Yüksek"; })
     .sort((a, b) => (evaluationsMap[b.id]?.ortalamaPotansiyel || 0) - (evaluationsMap[a.id]?.ortalamaPotansiyel || 0));
 
@@ -1211,7 +1404,8 @@ function renderAdmin() {
       <div class="stat-card" id="statLiderlik" style="cursor:pointer"><div class="n">${liderlikVar}</div><div class="l">Liderlik Potansiyeli (Var)</div></div>
       <div class="stat-card" id="statFonksiyonel" style="cursor:pointer"><div class="n">${fonksiyonelEvet}</div><div class="l">Fonksiyonel Geçişe Uygun (Evet)</div></div>
     </div>
-    ${noManager ? `<div class="error-box" style="display:block;background:var(--warn-bg);color:var(--warn)">${noManager} personelin müdürü eşleşmedi. "Yönetim" menüsünden atayabilirsiniz.</div>` : ""}
+    ${!isDuzenlenebilir() ? `<div class="error-box" style="display:block;background:var(--warn-bg);color:var(--warn)"><b>${viewDonem}</b> dönemi görüntüleniyor (salt okunur, geçmiş kayıtlar). Güncel dönem için sağ üstten <b>${aktifDonem} (Aktif)</b> seçin.</div>` : ""}
+    ${(isDuzenlenebilir() && noManager) ? `<div class="error-box" style="display:block;background:var(--warn-bg);color:var(--warn)">${noManager} personelin müdürü eşleşmedi. "Yönetim" menüsünden atayabilirsiniz.</div>` : ""}
 
     <div id="tabOverview">
       <div class="chart-grid">
@@ -1312,15 +1506,15 @@ function renderAdmin() {
 
   el("#statHavuz").addEventListener("click", () => openStatListDrawer(
     "Yetenek Havuzuna Alınmalı (Evet)",
-    employeesCache.filter((e) => evaluationsMap[e.id]?.yetenekHavuzuAlinmali === "Evet")
+    roster.filter((e) => evaluationsMap[e.id]?.yetenekHavuzuAlinmali === "Evet")
   ));
   el("#statLiderlik").addEventListener("click", () => openStatListDrawer(
     "Liderlik Potansiyeli (Var)",
-    employeesCache.filter((e) => evaluationsMap[e.id]?.liderlikPotansiyeli === "Var")
+    roster.filter((e) => evaluationsMap[e.id]?.liderlikPotansiyeli === "Var")
   ));
   el("#statFonksiyonel").addEventListener("click", () => openStatListDrawer(
     "Fonksiyonel Geçişe Uygun (Evet)",
-    employeesCache.filter((e) => evaluationsMap[e.id]?.fonksiyonelGecisUygun === "Evet")
+    roster.filter((e) => evaluationsMap[e.id]?.fonksiyonelGecisUygun === "Evet")
   ));
 
   document.querySelectorAll("#box9Grid .box9-cell").forEach((cell) => {
@@ -1332,7 +1526,7 @@ function renderAdmin() {
 
   document.querySelectorAll("#kritikRiskList .risk-alert-card").forEach((card) => {
     card.addEventListener("click", () => {
-      const emp = employeesCache.find((x) => x.id === card.dataset.id);
+      const emp = findEmpById(card.dataset.id);
       if (emp) openAdminDetailDrawer(emp);
     });
   });
@@ -1357,7 +1551,7 @@ function renderAdmin() {
     const riskF = el("#riskFilter").value;
     const readyF = el("#readyFilter").value;
     const col = ADMIN_COLUMNS.find((c) => c.key === sortState.key);
-    const list = employeesCache
+    const list = roster
       .filter((e) => e.adSoyad.toLocaleLowerCase("tr").includes(term))
       .filter((e) => !mgrF || e.muduluk === mgrF)
       .filter((e) => !deptF || e.departman === deptF)
@@ -1399,7 +1593,7 @@ function renderAdmin() {
 
     document.querySelectorAll(".person-link").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const emp = employeesCache.find((x) => x.id === btn.dataset.id);
+        const emp = findEmpById(btn.dataset.id);
         if (emp) openAdminDetailDrawer(emp);
       });
     });
@@ -1429,7 +1623,7 @@ function renderAdmin() {
 
 function exportCsv() {
   const headers = ["Ad Soyad", "Departman", "Bölüm", "Unvan", "Müdür", "Kıdem", "Durum", "Ort. Potansiyel", "Öğr. Çeviklik %", "Teknik Hakimiyet", "Değerlendirme", "Yetenek Havuzuna Alınmalı", "Liderlik Potansiyeli", "Hazır Olma Süresi", "Ayrılma Riski", "Fonksiyonel Geçişe Uygun", "Fonksiyonel Geçiş Departman/Rol", "Yedekleyebileceği Pozisyon", "Gelişim Alanları", "Gerekçe"];
-  const rows = employeesCache.map((e) => {
+  const rows = adminRoster().map((e) => {
     const ev = evaluationsMap[e.id] || {};
     return [
       e.adSoyad, e.departman, e.bolum, e.mevcutUnvan, e.muduluk || "", formatKidem(e.kurumKidemiYil),
@@ -1462,6 +1656,16 @@ function openManagePanel() {
         <button class="close-x" id="closeMng">✕</button>
       </div>
       <div class="drawer-body">
+        <div class="admin-panel" style="border:1.5px solid var(--brass);background:var(--warn-bg)">
+          <div class="section-title" style="margin-top:0">★ Yeni Dönem Başlat (Ağustos 2026)</div>
+          <p style="font-size:13px;color:var(--ink)">Adım 1 — Dönemi kurar: mevcut değerlendirmeleri <b>${DEF_ESKI}</b> dönemine kilitler (herkes görür, kimse düzenleyemez), yeni listeyi (<b>${typeof ROSTER_2026 !== "undefined" ? ROSTER_2026.length : 0}</b> kişi) yükler, yetki tanımlarını yazar ve aktif dönemi <b>${DEF_AKTIF}</b> yapar.</p>
+          <button class="btn btn-brass btn-sm" id="donemKurBtn">Adım 1 — Dönemi Kur</button>
+          <div id="donemKurMsg" style="font-size:12.5px;margin-top:8px;white-space:pre-line"></div>
+          <p style="font-size:13px;color:var(--ink);margin-top:14px">Adım 2 — Giriş hesaplarını hazırlar (<b>${typeof HESAPLAR !== "undefined" ? HESAPLAR.length : 0}</b> müdür/direktör).</p>
+          <button class="btn btn-ghost btn-sm" id="hesapAcBtn">Adım 2 — Giriş Hesaplarını Hazırla</button>
+          <div id="hesapAcMsg" style="font-size:12.5px;margin-top:8px;white-space:pre-line"></div>
+        </div>
+
         <div class="admin-panel">
           <div class="section-title" style="margin-top:0">1. Personel Listesi</div>
           <p style="font-size:13px;color:var(--ink-soft)">Firestore'da <b>${employeesCache.length}</b> personel kayıtlı (Excel'den yüklenen: ${EMPLOYEES.length}).</p>
@@ -1503,6 +1707,88 @@ function openManagePanel() {
   document.body.appendChild(overlay);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
   el("#closeMng").onclick = () => overlay.remove();
+
+  // ★ Adım 1 — Dönemi kur: eski değerlendirmeleri dondur + yeni roster + yetki tanımları + settings
+  const donemKurBtn = el("#donemKurBtn");
+  if (donemKurBtn) donemKurBtn.onclick = async () => {
+    const msg = el("#donemKurMsg");
+    if (typeof ROSTER_2026 === "undefined" || typeof HESAPLAR === "undefined") {
+      msg.style.color = "var(--bad)"; msg.textContent = "donem-data.js yüklenemedi."; return;
+    }
+    if (!confirm(`Yeni dönem kurulacak:\n• Mevcut değerlendirmeler "${DEF_ESKI}" olarak kilitlenecek\n• ${ROSTER_2026.length} kişilik yeni liste yüklenecek\n• Aktif dönem "${DEF_AKTIF}" olacak\n\nDevam edilsin mi?`)) return;
+    donemKurBtn.disabled = true; donemKurBtn.textContent = "Kuruluyor…"; msg.style.color = "var(--ink-soft)";
+    try {
+      const commitChunks = async (ops) => {
+        for (let i = 0; i < ops.length; i += 400) {
+          const b = writeBatch(db);
+          ops.slice(i, i + 400).forEach((fn) => fn(b));
+          await b.commit();
+        }
+      };
+      // 1) Eski değerlendirmeleri dönemle etiketle (donem alanı olmayanlar → DEF_ESKI)
+      msg.textContent = "1/4 Eski değerlendirmeler kilitleniyor…";
+      const evSnap = await getDocs(collection(db, "evaluations"));
+      const evOps = [];
+      evSnap.forEach((d) => { if (!d.data().donem) evOps.push((b) => b.set(doc(db, "evaluations", d.id), { donem: DEF_ESKI }, { merge: true })); });
+      await commitChunks(evOps);
+
+      // 2) Yeni roster (tam liste; eskiden kalan, listede olmayan personel silinir)
+      msg.textContent = "2/4 Yeni personel listesi yükleniyor…";
+      const yeniIds = new Set(ROSTER_2026.map((e) => e.id));
+      const rOps = ROSTER_2026.map((emp) => (b) => b.set(doc(db, "employees", emp.id), emp));
+      const empSnap = await getDocs(collection(db, "employees"));
+      empSnap.forEach((d) => { if (!yeniIds.has(d.id)) rOps.push((b) => b.delete(doc(db, "employees", d.id))); });
+      await commitChunks(rOps);
+
+      // 3) Yetki tanımları (profiles/{username}) — uid gerektirmez, güncellenebilir
+      msg.textContent = "3/4 Yetki tanımları yazılıyor…";
+      const pOps = HESAPLAR.map((h) => (b) => b.set(doc(db, "profiles", h.username), {
+        adSoyad: h.adSoyad, username: h.username,
+        muduluk: h.muduluk || null, direktorluk: h.direktorluk || null,
+        roller: h.roller || [], isAdmin: false, updatedAt: serverTimestamp()
+      }, { merge: true }));
+      await commitChunks(pOps);
+
+      // 4) settings
+      msg.textContent = "4/4 Dönem ayarı kaydediliyor…";
+      await setDoc(doc(db, "settings", "genel"), { aktifDonem: DEF_AKTIF, donemler: DEF_DONEMLER, updatedAt: serverTimestamp() }, { merge: true });
+      aktifDonem = DEF_AKTIF; donemList = DEF_DONEMLER; viewDonem = DEF_AKTIF;
+
+      msg.style.color = "var(--good)";
+      msg.textContent = `✓ Dönem kuruldu. ${ROSTER_2026.length} personel yüklendi, eski değerlendirmeler "${DEF_ESKI}" olarak kilitlendi.\nŞimdi Adım 2 ile giriş hesaplarını hazırlayın.`;
+    } catch (e) {
+      msg.style.color = "var(--bad)"; msg.textContent = "Hata: " + e.message;
+    }
+    donemKurBtn.disabled = false; donemKurBtn.textContent = "Adım 1 — Dönemi Kur";
+  };
+
+  // ★ Adım 2 — Giriş hesaplarını hazırla (her müdür/direktör için tek tek, izole app ile)
+  const hesapAcBtn = el("#hesapAcBtn");
+  if (hesapAcBtn) hesapAcBtn.onclick = async () => {
+    const msg = el("#hesapAcMsg");
+    if (typeof HESAPLAR === "undefined") { msg.style.color = "var(--bad)"; msg.textContent = "donem-data.js yüklenemedi."; return; }
+    if (!confirm(`${HESAPLAR.length} müdür/direktör için giriş hesabı hazırlanacak (varsayılan şifre: ${VARSAYILAN_SIFRE}). Zaten var olanlar atlanır. Devam?`)) return;
+    hesapAcBtn.disabled = true; hesapAcBtn.textContent = "Hazırlanıyor…";
+    let acildi = 0, vardi = 0, hata = 0;
+    const secondary = initializeApp(firebaseConfig, "acc-" + Date.now());
+    const auth2 = getAuth(secondary);
+    for (let i = 0; i < HESAPLAR.length; i++) {
+      const h = HESAPLAR[i];
+      msg.style.color = "var(--ink-soft)";
+      msg.textContent = `${i + 1}/${HESAPLAR.length} · ${h.username} işleniyor… (yeni: ${acildi}, mevcut: ${vardi})`;
+      try {
+        await createUserWithEmailAndPassword(auth2, `${h.username}@${LOGIN_DOMAIN}`, VARSAYILAN_SIFRE);
+        acildi++;
+        try { await signOut(auth2); } catch (e) {}
+      } catch (e) {
+        if (e.code === "auth/email-already-in-use") vardi++;
+        else hata++;
+      }
+    }
+    msg.style.color = hata ? "var(--warn)" : "var(--good)";
+    msg.textContent = `✓ Tamamlandı. Yeni açılan: ${acildi}, zaten mevcut: ${vardi}${hata ? ", hata: " + hata : ""}.\nHerkesin kullanıcı adı ad.soyad, şifresi ${VARSAYILAN_SIFRE}.`;
+    hesapAcBtn.disabled = false; hesapAcBtn.textContent = "Adım 2 — Giriş Hesaplarını Hazırla";
+  };
 
   el("#seedBtn").onclick = async () => {
     el("#seedBtn").disabled = true;
