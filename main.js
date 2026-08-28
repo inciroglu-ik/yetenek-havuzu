@@ -33,10 +33,9 @@ const SCORE_LABELS = [
   { v: 5, l: "5 · Rol Model" }
 ];
 
+// POTANSİYEL (YETENEK HAVUZU.xlsx · L–R sütunları) — 1–5 puan
 const POTANSIYEL_FIELDS = [
-  ["musteriOdaklilik", "Müşteri Odaklılık", "İç/dış müşteriler ile güçlü bağlar kurmak ve müşteri merkezli çözümler sunmak."],
   ["belirsizlikYonetimi", "Belirsizliği Yönetmek", "İşler veya yolun gidişatı belirgin olmasa bile etkili biçimde çalışmak."],
-  ["sonucOdaklilik", "Sonuç Odaklılık", "Zorlu koşullar altında bile tutarlı biçimde sonuç elde eder."],
   ["isbirligiGelistirme", "İş Birliği Geliştirmek", "Ortak hedeflere ulaşmak için ortaklıklar kurar ve iş birliği yapar."],
   ["kisiselFarkindalik", "Kişisel Farkındalık Göstermek", "Geri bildirim ve özdüşünümle güçlü/zayıf yanlarına dair içgörü edinmek."],
   ["sorumlulukAlma", "Sorumluluk Almak", "Kendini ve başkalarını taahhütleri yerine getirme konusunda sorumlu tutar."],
@@ -45,40 +44,37 @@ const POTANSIYEL_FIELDS = [
   ["guvenYaratma", "Güven Yaratma", "Dürüstlük, doğruluk ve güvenilirlik yoluyla başkalarının güvenini kazanmak."]
 ];
 
+// ÖĞRENME ÇEVİKLİĞİ (AJ–AN) — Var / Yok
 const CEVIKLIK_FIELDS = [
   ["zihinselCeviklik", "Zihinsel Çeviklik", "Meraklıdır ve yeni, karmaşık durumlarla mücadele edebilir."],
-  ["insanCevikligi", "İnsan Çevikliği", "Anlayışlı, kişilerarası durumlar ve işleri halletmekte ustalık sergiler."],
+  ["insanCevikligi", "İnsan Çevikliği", "Anlayışlı; kişilerarası durumlar ve işleri halletmekte ustalık sergiler."],
   ["degisimCevikligi", "Değişim Çevikliği", "Değişimin tadını çıkarır, yeni yaklaşımlar inşa etmekten keyif alır."],
   ["sonucCevikligi", "Sonuç Çevikliği", "Engellere rağmen esneklikle sonuçlara ulaşır."],
   ["durumsalOzFarkindalik", "Durumsal Öz Farkındalık", "Anın koşullarına göre kendi etkisini fark eder, yaklaşımını uyarlar."]
 ];
 
-const TEKNIK_FIELDS = [
-  ["isBilgisi", "İş Bilgisi ve Mesleki Hakimiyet", "Rolünün gerektirdiği teknik donanım, mevzuat ve işleyişe hakimiyet."],
-  ["dijitalYetkinlik", "Dijital Yetkinlik", "Dijital araç ve teknolojileri etkin kullanma; değişime direnç göstermeme."],
-  ["iknaMuzakere", "İkna ve Müzakere Gücü", "Fikrini karşı tarafın ihtiyaç ve motivasyonlarını anlayarak kabul ettirebilme."],
-  ["kurumsalDeger", "Kurumsal Değerlere Uyum ve Temsil", "Kurum kültürü ve profesyonel standartları her ortamda yansıtma."]
+// PERFORMANS (T–AH) — Düşük / Orta / Yüksek · [key, label, negatif?]
+const PERFORMANS_FIELDS = [
+  ["rolZorlukBasaCikma", "Mevcut Rolünde Zorluklarla Başa Çıkma Becerisi", false],
+  ["davranisIstikrar", "Davranışlarında İstikrar Tutumu", false],
+  ["stresKapaliTutum", "Stres Altında Kapalı Bir Tutum Sergiliyor mu?", true],
+  ["isBilgisi", "İş Bilgisi ve Mesleki Hakimiyet", false],
+  ["dijitalYetkinlik", "Dijital Yetkinlik", false],
+  ["iknaMuzakere", "İkna / Müzakere Gücü", false],
+  ["kurumsalDeger", "Kurumsal Değerlere Uyum ve Temsil", false],
+  ["meslekiBilgiBeceri", "Gerekli Mesleki Bilgi ve Beceriye Sahip mi?", false],
+  ["yeterliDeneyim", "Yeterli Deneyime Sahip mi?", false],
+  ["isbirligiEgilim", "İş Birliği Yapma Eğilimi", false],
+  ["dogalLiderlik", "Doğal Liderlik Özellikleri / Liderlikle Motive Olma", false],
+  ["inisiyatifAlternatif", "İnisiyatif Alma ve Alternatif Üretme", false],
+  ["deneyimdenOgrenme", "Deneyimlerden Ders Çıkarma", false],
+  ["sonucOdaklilik", "Sonuç Odaklılık", false],
+  ["musteriOdaklilik", "Müşteri Odaklılık", false]
 ];
+const DOY_OPTS = [{ v: "Düşük", l: "Düşük" }, { v: "Orta", l: "Orta" }, { v: "Yüksek", l: "Yüksek" }];
 
 // Kıdemi bu değerin altında (yıl) olanlar değerlendirme dışıdır (6 ay = 0.5)
 const KIDEM_ESIK = 0.5;
-
-// EK DEĞERLENDİRME KRİTERLERİ (YETENEK HAVUZU.xlsx · Y–AH sütunları) — Düşük / Orta / Yüksek
-// eksen: "perf" performans ekseni, "pot" potansiyel/liderlik ekseni; negatif: yüksek = olumsuz
-const EK_KRITERLER = [
-  ["rolZorlukBasaCikma", "Mevcut Rolünde Zorluklarla Başa Çıkma Becerisi Güçlü Mü?", "perf", false],
-  ["davranisIstikrar", "Davranışlarında İstikrarlı Mı?", "perf", false],
-  ["stresKapaliTutum", "Zorlu Durumlar ve Stres Altında Kapalı Bir Tutum Sergiliyor Mu?", "perf", true],
-  ["meslekiBilgiBeceri", "Gerekli Mesleki Bilgi ve Beceriye Sahip Mi?", "perf", false],
-  ["yeterliDeneyim", "Yeterli Deneyime Sahip Mi?", "perf", false],
-  ["isbirligiEgilim", "İş Birliği Yapma Eğilimi Var Mı?", "pot", false],
-  ["dogalLiderlik", "Doğal Liderlik Özelliklerine Sahip Mi? Liderlik ile Motive Oluyor Mu?", "pot", false],
-  ["inisiyatifAlternatif", "İnisiyatif Alma ve Alternatif Üretme Becerisi Var Mı?", "pot", false],
-  ["deneyimdenOgrenme", "Deneyimlerden Ders Çıkarıp Yeni Güçlüklerde Faydalanıyor Mu?", "pot", false],
-  ["sonucaUlasmaKararli", "Sonuca Ulaşma Konusunda Kararlı Tutumlar Sergiliyor Mu?", "perf", false]
-];
-const EK_OPTS = [{ v: "Düşük", l: "Düşük" }, { v: "Orta", l: "Orta" }, { v: "Yüksek", l: "Yüksek" }];
-
 function kidemDisi(emp) {
   return emp && typeof emp.kurumKidemiYil === "number" && emp.kurumKidemiYil < KIDEM_ESIK;
 }
@@ -101,27 +97,24 @@ const GRID9 = {
   "0-2": { baslik: "KİLİT PERFORMANS", renk: "#2b5797", aciklama: ["Tutarlı biçimde performans beklentilerini aşar.", "Mevcut pozisyonunda kalmayı ve gelişmeyi arzular.", "Potansiyeline ulaşmıştır; lider ve rol modeli olarak kabul edilir."] }
 };
 
-function ekVal(v, negatif) {
-  const m = { "Düşük": 25, "Orta": 60, "Yüksek": 95 };
-  const x = m[v];
-  if (x === undefined) return null;
-  return negatif ? (120 - x) : x;
+// Düşük/Orta/Yüksek -> 1/2/3
+function doyNum(v) { return v === "Düşük" ? 1 : v === "Orta" ? 2 : v === "Yüksek" ? 3 : null; }
+// PERFORMANS bloğu ortalaması (1–3); negatif maddede yüksek = olumsuz (ters çevrilir)
+function performansOrt(perf) {
+  if (!perf) return null;
+  const vals = PERFORMANS_FIELDS.map(([k, , neg]) => { const n = doyNum(perf[k]); if (n == null) return null; return neg ? (4 - n) : n; }).filter((v) => v != null);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
 }
+function performansSkoru(ev) { const o = performansOrt(ev.performans); return o == null ? null : (o - 1) / 2 * 100; }
+// Potansiyel ekseni = Potansiyel (%60) + Öğrenme Çevikliği (%40) ağırlıklı
 function potansiyelSkoru(ev) {
-  const parts = [];
-  if (ev.ortalamaPotansiyel != null) parts.push(ev.ortalamaPotansiyel / 5 * 100);
-  if (ev.ortalamaOgrenmeCevikligi != null) parts.push(ev.ortalamaOgrenmeCevikligi * 100);
-  EK_KRITERLER.filter((k) => k[2] === "pot").forEach(([key, , , neg]) => { const x = ekVal(ev.ekKriterler && ev.ekKriterler[key], neg); if (x != null) parts.push(x); });
-  if (ev.liderlikPotansiyeli === "Var") parts.push(100); else if (ev.liderlikPotansiyeli === "Yok") parts.push(30);
-  return parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : null;
-}
-function performansSkoru(ev) {
-  const parts = [];
-  if (ev.teknikHakimiyetOrt != null) parts.push(ev.teknikHakimiyetOrt / 5 * 100);
-  EK_KRITERLER.filter((k) => k[2] === "perf").forEach(([key, , , neg]) => { const x = ekVal(ev.ekKriterler && ev.ekKriterler[key], neg); if (x != null) parts.push(x); });
-  return parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : null;
+  const a = ev.ortalamaPotansiyel != null ? ev.ortalamaPotansiyel / 5 * 100 : null;
+  const b = ev.ortalamaOgrenmeCevikligi != null ? ev.ortalamaOgrenmeCevikligi * 100 : null;
+  if (a != null && b != null) return 0.6 * a + 0.4 * b;
+  return a != null ? a : (b != null ? b : null);
 }
 function band100(x) { if (x == null) return null; if (x >= 75) return 2; if (x >= 50) return 1; return 0; }
+function sinifLabel(x) { const b = band100(x); return b == null ? "—" : b === 2 ? "YÜKSEK" : b === 1 ? "YETKİN" : "GELİŞİM İHTİYACI"; }
 function gridPos(ev) {
   if (!ev) return null;
   const p = band100(potansiyelSkoru(ev));
@@ -130,29 +123,58 @@ function gridPos(ev) {
   return { pot: p, perf: q };
 }
 
+// İK sistem önerisi: performans + potansiyel + çeviklik + liderlik -> Evet/Hayır
+function sistemOnerisi(ev) {
+  const pot = potansiyelSkoru(ev), perf = performansSkoru(ev);
+  if (pot == null || perf == null) return null;
+  const lider = ev.liderlikPotansiyeli === "Var";
+  const evet = (pot >= 60 && perf >= 55) || pot >= 75 || (perf >= 80 && pot >= 50) || (lider && pot >= 60 && perf >= 50);
+  return evet ? "Evet" : "Hayır";
+}
+// Neden havuzda olmalı/olmamalı — 2–3 cümle otomatik gerekçe
+function sistemGerekce(ev) {
+  const pot = potansiyelSkoru(ev), perf = performansSkoru(ev);
+  if (pot == null || perf == null) return "";
+  const pos = gridPos(ev); const cell = pos ? GRID9[pos.pot + "-" + pos.perf] : null;
+  const ad = ev.adSoyad || "Personel";
+  const potT = band100(pot) === 2 ? "yüksek" : band100(pot) === 1 ? "orta" : "gelişime açık";
+  const perfT = band100(perf) === 2 ? "yüksek" : band100(perf) === 1 ? "normal" : "düşük";
+  const guclu = [];
+  if (ev.ortalamaPotansiyel != null && ev.ortalamaPotansiyel >= 3.75) guclu.push("potansiyel yetkinlikleri güçlü");
+  if (ev.ortalamaOgrenmeCevikligi != null && ev.ortalamaOgrenmeCevikligi >= 0.7) guclu.push("öğrenme çevikliği yüksek");
+  const perfYuksek = PERFORMANS_FIELDS.filter(([k, , neg]) => { const v = ev.performans && ev.performans[k]; return neg ? v === "Düşük" : v === "Yüksek"; }).map(([, l]) => l);
+  if (perfYuksek.length) guclu.push("performansta öne çıkanlar: " + perfYuksek.slice(0, 3).join(", "));
+  if (ev.liderlikPotansiyeli === "Var") guclu.push("liderlik potansiyeli mevcut");
+  const s1 = `${ad}, liderlik potansiyeli ekseninde ${potT}, performans ekseninde ${perfT} seviyededir${cell ? ` (${cell.baslik})` : ""}.`;
+  const s2 = guclu.length ? `Öne çıkan yönleri: ${guclu.join("; ")}.` : "Değerlendirme verisi sınırlı olduğundan güçlü yön tespiti kısıtlı.";
+  const s3 = sistemOnerisi(ev) === "Evet"
+    ? "Bu profil, gelişim ve kritik pozisyon yedeklemesi açısından yetenek havuzuna dahil edilmeye uygundur."
+    : "Bu profil şu an havuz kriterlerini tam karşılamıyor; hedefli gelişim sonrası yeniden değerlendirilmesi önerilir.";
+  return `${s1} ${s2} ${s3}`;
+}
+
 function computeDerived(d) {
   const pVals = POTANSIYEL_FIELDS.map(([k]) => d.potansiyel?.[k]).filter((v) => v);
-  const ortalamaPotansiyel = pVals.length ? pVals.reduce((a, b) => a + b, 0) / POTANSIYEL_FIELDS.length : 0;
+  const ortalamaPotansiyel = pVals.length ? pVals.reduce((a, b) => a + b, 0) / pVals.length : 0;
   const cVals = CEVIKLIK_FIELDS.map(([k]) => d.ogrenmeCevikligi?.[k]);
   const cFilled = cVals.filter((v) => v !== undefined && v !== null);
   const ortalamaOgrenmeCevikligi = cFilled.length ? cFilled.filter(Boolean).length / CEVIKLIK_FIELDS.length : 0;
-  const tVals = TEKNIK_FIELDS.map(([k]) => d.teknikHakimiyet?.[k]).filter((v) => v);
-  const teknikHakimiyetOrt = tVals.length ? tVals.reduce((a, b) => a + b, 0) / TEKNIK_FIELDS.length : 0;
-  const hazir = ortalamaPotansiyel > 3.75 && ortalamaOgrenmeCevikligi > 0.7 && teknikHakimiyetOrt > 3.25;
+  const pOrt = performansOrt(d.performans) || 0;
+  const perfSk = pOrt ? (pOrt - 1) / 2 * 100 : 0;
   return {
     ortalamaPotansiyel: Math.round(ortalamaPotansiyel * 100) / 100,
     ortalamaOgrenmeCevikligi: Math.round(ortalamaOgrenmeCevikligi * 100) / 100,
-    teknikHakimiyetOrt: Math.round(teknikHakimiyetOrt * 100) / 100,
-    potansiyelDegerlendirme: hazir ? "EĞİTİM VERİLİP ASSESSMENT YAPILABİLİR" : "GELİŞİM İHTİYACI"
+    performansOrt: Math.round(pOrt * 100) / 100,
+    performansSinifi: sinifLabel(perfSk),
+    potansiyelDegerlendirme: sinifLabel(perfSk)
   };
 }
 
 function isComplete(d) {
   const pOk = POTANSIYEL_FIELDS.every(([k]) => d.potansiyel?.[k]);
   const cOk = CEVIKLIK_FIELDS.every(([k]) => d.ogrenmeCevikligi?.[k] !== undefined && d.ogrenmeCevikligi?.[k] !== null);
-  const tOk = TEKNIK_FIELDS.every(([k]) => d.teknikHakimiyet?.[k]);
-  const ekOk = EK_KRITERLER.every(([k]) => d.ekKriterler?.[k]);
-  return pOk && cOk && tOk && ekOk && d.liderlikPotansiyeli && d.hazirOlmaSuresi && d.ayrilmaRiski && d.gerekce && d.gerekce.trim().length > 0;
+  const perfOk = PERFORMANS_FIELDS.every(([k]) => d.performans?.[k]);
+  return pOk && cOk && perfOk && d.liderlikPotansiyeli && d.hazirOlmaSuresi && d.ayrilmaRiski && d.gerekce && d.gerekce.trim().length > 0;
 }
 
 function formatKidem(kurumKidemiYil) {
@@ -704,8 +726,7 @@ function openEvalDrawer(emp) {
   const d = {
     potansiyel: { ...(existing.potansiyel || {}) },
     ogrenmeCevikligi: { ...(existing.ogrenmeCevikligi || {}) },
-    teknikHakimiyet: { ...(existing.teknikHakimiyet || {}) },
-    ekKriterler: { ...(existing.ekKriterler || {}) },
+    performans: { ...(existing.performans || {}) },
     liderlikPotansiyeli: existing.liderlikPotansiyeli || "",
     yetenekHavuzuAlinmali: existing.yetenekHavuzuAlinmali || "",
     hazirOlmaSuresi: existing.hazirOlmaSuresi || "",
@@ -714,7 +735,6 @@ function openEvalDrawer(emp) {
     gelisimAlanlari: existing.gelisimAlanlari || "",
     fonksiyonelGecisUygun: existing.fonksiyonelGecisUygun || "",
     fonksiyonelGecisDept: existing.fonksiyonelGecisDept || "",
-    egitimOnerileri: existing.egitimOnerileri || [],
     gerekce: existing.gerekce || ""
   };
 
@@ -758,16 +778,18 @@ function openEvalDrawer(emp) {
     </div>`;
   }
 
-  const trainingOptions = TRAININGS.map((t) => `${t.kategori} — ${t.baslik.split(":")[0]}`);
-
   function summaryHtml() {
     const der = computeDerived(d);
+    const ev = { ...d, ...der };
+    const pos = gridPos(ev);
+    const oneri = sistemOnerisi(ev);
     return `
     <div class="summary-box">
       <div class="row"><span>Ortalama Potansiyel</span><b>${der.ortalamaPotansiyel} / 5</b></div>
       <div class="row"><span>Öğrenme Çevikliği Oranı</span><b>${Math.round(der.ortalamaOgrenmeCevikligi * 100)}%</b></div>
-      <div class="row"><span>Teknik Hakimiyet Ortalaması</span><b>${der.teknikHakimiyetOrt} / 5</b></div>
-      <div class="verdict ${der.potansiyelDegerlendirme.includes("GELİŞİM") ? "dev" : "ok"}">${der.potansiyelDegerlendirme}</div>
+      <div class="row"><span>Performans Sınıfı</span><b>${der.performansSinifi}</b></div>
+      ${pos ? `<div class="row"><span>9-Grid Konumu</span><b>${GRID9[pos.pot + "-" + pos.perf].baslik}</b></div>` : ""}
+      ${oneri ? `<div class="verdict ${oneri === "Evet" ? "ok" : "dev"}">Sistem Önerisi — Yetenek Havuzuna: ${oneri.toLocaleUpperCase("tr")}</div>` : ""}
     </div>`;
   }
 
@@ -790,14 +812,11 @@ function openEvalDrawer(emp) {
     <div class="section-title">Potansiyel Yetkinlikleri (1–5)</div>
     ${POTANSIYEL_FIELDS.map(([k, l, ds]) => segHtml("potansiyel", k, l, ds, SCORE_LABELS.map((s) => ({ v: s.v, l: s.l })))).join("")}
 
+    <div class="section-title">Performans (Düşük / Orta / Yüksek)</div>
+    ${PERFORMANS_FIELDS.map(([k, l]) => segHtml("performans", k, l, "", DOY_OPTS)).join("")}
+
     <div class="section-title">Öğrenme Çevikliği (Var / Yok)</div>
     ${CEVIKLIK_FIELDS.map(([k, l, ds]) => segHtml("ogrenmeCevikligi", k, l, ds, [{ v: "true", l: "Var" }, { v: "false", l: "Yok" }], true)).join("")}
-
-    <div class="section-title">Teknik Hakimiyet (1–5)</div>
-    ${TEKNIK_FIELDS.map(([k, l, ds]) => segHtml("teknikHakimiyet", k, l, ds, SCORE_LABELS.map((s) => ({ v: s.v, l: s.l })))).join("")}
-
-    <div class="section-title">Ek Değerlendirme Kriterleri (Düşük / Orta / Yüksek)</div>
-    ${EK_KRITERLER.map(([k, l]) => segHtml("ekKriterler", k, l, "", EK_OPTS)).join("")}
 
     ${summaryHtml()}
 
@@ -840,14 +859,6 @@ function openEvalDrawer(emp) {
       </div>
     </div>
     <div class="field">
-      <label>Önerilen Eğitimler (en fazla 5)</label>
-      <div class="checklist" id="egitimList">
-        ${trainingOptions.map((t, i) => `
-          <label><input type="checkbox" value="${t}" ${d.egitimOnerileri.includes(t) ? "checked" : ""}> ${t}</label>
-        `).join("")}
-      </div>
-    </div>
-    <div class="field">
       <label>Gerekçe (Vaka / Çıktı / Reaksiyon — en az birini temel alınız)</label>
       <textarea id="gerekce" rows="4" placeholder="Hangi olayda bu yetkinliği sergiledi? Hangi iş sonucuna katkı sağladı? Hangi krizde inisiyatif aldı?">${d.gerekce || ""}</textarea>
     </div>`;
@@ -868,9 +879,8 @@ function openEvalDrawer(emp) {
       if (node) { if (attemptedFinal) node.classList.add("field-error"); if (!firstBad) firstBad = node; }
     }
     POTANSIYEL_FIELDS.forEach(([k]) => { if (!d.potansiyel[k]) mark(`.comp-row[data-fieldkey="potansiyel.${k}"]`); });
+    PERFORMANS_FIELDS.forEach(([k]) => { if (!d.performans[k]) mark(`.comp-row[data-fieldkey="performans.${k}"]`); });
     CEVIKLIK_FIELDS.forEach(([k]) => { if (d.ogrenmeCevikligi[k] === undefined || d.ogrenmeCevikligi[k] === null) mark(`.comp-row[data-fieldkey="ogrenmeCevikligi.${k}"]`); });
-    TEKNIK_FIELDS.forEach(([k]) => { if (!d.teknikHakimiyet[k]) mark(`.comp-row[data-fieldkey="teknikHakimiyet.${k}"]`); });
-    EK_KRITERLER.forEach(([k]) => { if (!d.ekKriterler[k]) mark(`.comp-row[data-fieldkey="ekKriterler.${k}"]`); });
     if (!d.liderlikPotansiyeli) mark('.comp-row[data-fieldkey="liderlikPotansiyeli"]');
     if (!d.hazirOlmaSuresi) mark("#hazirOlmaSuresi");
     if (!d.ayrilmaRiski) mark("#ayrilmaRiski");
@@ -915,19 +925,6 @@ function openEvalDrawer(emp) {
       const node = document.getElementById(id);
       if (node) node.addEventListener("input", () => { d[id] = node.value; validateAndHighlight(); scheduleAutosave(); });
     });
-    const egitimList = document.getElementById("egitimList");
-    if (egitimList) {
-      egitimList.addEventListener("change", (e) => {
-        const checked = Array.from(egitimList.querySelectorAll("input:checked")).map((c) => c.value);
-        if (checked.length > 5) {
-          e.target.checked = false;
-          toast("En fazla 5 eğitim seçebilirsiniz.");
-          return;
-        }
-        d.egitimOnerileri = checked;
-        scheduleAutosave();
-      });
-    }
   }
 
   refresh();
@@ -1004,31 +1001,37 @@ function openAdminDetailDrawer(emp) {
       if (kidemDisi(emp)) return `<div class="empty-state">Bu personel <b>kıdemi 6 aydan az</b> olduğu için değerlendirme dışıdır; müdürüne metrikler doldurtulmaz.</div>`;
       return `<div class="empty-state">Bu personel için henüz bir değerlendirme girilmedi.</div>`;
     }
+    const pos = gridPos(ev);
+    const oneri = sistemOnerisi(ev);
+    const gerekceSis = sistemGerekce(ev);
     return `
+    ${pos ? `<div class="summary-box" style="margin-top:0">
+      <div class="row"><span>9-Grid Konumu</span><b>${GRID9[pos.pot + "-" + pos.perf].baslik} (${POT_ETIKET[pos.pot]} / ${PERF_ETIKET[pos.perf]})</b></div>
+      <div class="row"><span>Sistem Önerisi — Yetenek Havuzuna</span><b style="color:${oneri === "Evet" ? "var(--good)" : "var(--bad)"}">${(oneri || "—").toLocaleUpperCase("tr")}</b></div>
+      <div class="row"><span>Yönetici Görüşü (AY)</span><b>${ev.yetenekHavuzuAlinmali || "—"}</b></div>
+      <div style="font-size:12.5px;color:var(--ink);line-height:1.5;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Neden:</b> ${gerekceSis}</div>
+    </div>` : ""}
+
     <div class="section-title" style="margin-top:0">Genel</div>
-    ${rowHtml("Yetenek Havuzuna Alınmalı mı?", ev.yetenekHavuzuAlinmali)}
+    ${rowHtml("Yetenek Havuzuna Alınmalı mı? (Yönetici)", ev.yetenekHavuzuAlinmali)}
     ${rowHtml("Liderlik Potansiyeli / Ekip Yönetim Potansiyeli", ev.liderlikPotansiyeli)}
 
     <div class="section-title">Potansiyel Yetkinlikleri</div>
     ${POTANSIYEL_FIELDS.map(([k, l]) => rowHtml(l, scoreLabelText(ev.potansiyel?.[k]))).join("")}
 
+    <div class="section-title">Performans (Düşük / Orta / Yüksek)</div>
+    ${PERFORMANS_FIELDS.map(([k, l]) => rowHtml(l, ev.performans?.[k])).join("")}
+
     <div class="section-title">Öğrenme Çevikliği</div>
     ${CEVIKLIK_FIELDS.map(([k, l]) => rowHtml(l, ev.ogrenmeCevikligi?.[k] === true ? "Var" : ev.ogrenmeCevikligi?.[k] === false ? "Yok" : "—")).join("")}
-
-    <div class="section-title">Teknik Hakimiyet</div>
-    ${TEKNIK_FIELDS.map(([k, l]) => rowHtml(l, scoreLabelText(ev.teknikHakimiyet?.[k]))).join("")}
-
-    <div class="section-title">Ek Değerlendirme Kriterleri</div>
-    ${EK_KRITERLER.map(([k, l]) => rowHtml(l, ev.ekKriterler?.[k])).join("")}
 
     <div class="summary-box">
       <div class="row"><span>Ortalama Potansiyel</span><b>${ev.ortalamaPotansiyel ?? "—"} / 5</b></div>
       <div class="row"><span>Öğrenme Çevikliği Oranı</span><b>${ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) + "%" : "—"}</b></div>
-      <div class="row"><span>Teknik Hakimiyet Ortalaması</span><b>${ev.teknikHakimiyetOrt ?? "—"} / 5</b></div>
-      <div class="verdict ${(ev.potansiyelDegerlendirme || "").includes("GELİŞİM") ? "dev" : "ok"}">${ev.potansiyelDegerlendirme || "—"}</div>
+      <div class="row"><span>Performans Sınıfı</span><b>${ev.performansSinifi || sinifLabel(performansSkoru(ev))}</b></div>
     </div>
 
-    <div class="section-title">Gelişim ve Planlama</div>
+    <div class="section-title">Planlama (Bağımsız Değerlendirmeler)</div>
     ${rowHtml("Hazır Olma Süresi", ev.hazirOlmaSuresi)}
     ${rowHtml("Ayrılma Riski", ev.ayrilmaRiski)}
     ${rowHtml("Yedekleyebileceği Pozisyonlar", ev.yedekPozisyonlar)}
@@ -1039,11 +1042,7 @@ function openAdminDetailDrawer(emp) {
       <div style="font-size:13px;color:var(--ink)">${ev.gelisimAlanlari || "—"}</div>
     </div>
     <div class="comp-row">
-      <div class="q">Önerilen Eğitimler</div>
-      <div style="font-size:13px;color:var(--ink)">${(ev.egitimOnerileri && ev.egitimOnerileri.length) ? ev.egitimOnerileri.map((t) => `<span class="tag">${t}</span>`).join(" ") : "—"}</div>
-    </div>
-    <div class="comp-row">
-      <div class="q">Gerekçe</div>
+      <div class="q">Gerekçe (Yönetici)</div>
       <div style="font-size:13px;color:var(--ink);white-space:pre-wrap">${ev.gerekce || "—"}</div>
     </div>
     <div class="comp-row">
@@ -1172,30 +1171,32 @@ async function exportSinglePersonExcel(emp, ev) {
       dataRow("Yetenek Havuzuna Alınmalı mı?", ev.yetenekHavuzuAlinmali, { shade: (shade = !shade) });
       dataRow("Liderlik Potansiyeli / Ekip Yönetim Potansiyeli", ev.liderlikPotansiyeli, { shade: (shade = !shade) });
 
+      const pos = gridPos(ev);
+      sectionRow("Sistem Analizi (İK)");
+      shade = false;
+      dataRow("9-Grid Konumu", pos ? `${GRID9[pos.pot + "-" + pos.perf].baslik} (${POT_ETIKET[pos.pot]} / ${PERF_ETIKET[pos.perf]})` : "—", { shade: (shade = !shade) });
+      dataRow("Sistem Önerisi — Yetenek Havuzuna", (sistemOnerisi(ev) || "—").toLocaleUpperCase("tr"), { shade: (shade = !shade) });
+      dataRow("Neden (Gerekçe)", sistemGerekce(ev), { shade: (shade = !shade), height: 60 });
+
       sectionRow("Potansiyel Yetkinlikleri");
       shade = false;
       POTANSIYEL_FIELDS.forEach(([k, l]) => dataRow(l, scoreLabelText(ev.potansiyel?.[k]), { shade: (shade = !shade) }));
+
+      sectionRow("Performans (Düşük / Orta / Yüksek)");
+      shade = false;
+      PERFORMANS_FIELDS.forEach(([k, l]) => dataRow(l, ev.performans?.[k], { shade: (shade = !shade) }));
 
       sectionRow("Öğrenme Çevikliği");
       shade = false;
       CEVIKLIK_FIELDS.forEach(([k, l]) => dataRow(l, ev.ogrenmeCevikligi?.[k] === true ? "Var" : ev.ogrenmeCevikligi?.[k] === false ? "Yok" : "—", { shade: (shade = !shade) }));
 
-      sectionRow("Teknik Hakimiyet");
-      shade = false;
-      TEKNIK_FIELDS.forEach(([k, l]) => dataRow(l, scoreLabelText(ev.teknikHakimiyet?.[k]), { shade: (shade = !shade) }));
-
-      sectionRow("Ek Değerlendirme Kriterleri");
-      shade = false;
-      EK_KRITERLER.forEach(([k, l]) => dataRow(l, ev.ekKriterler?.[k], { shade: (shade = !shade) }));
-
       sectionRow("Hesaplanan Sonuçlar");
       shade = false;
       dataRow("Ortalama Potansiyel (/5)", ev.ortalamaPotansiyel, { shade: (shade = !shade) });
       dataRow("Öğrenme Çevikliği Oranı", ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) + "%" : "—", { shade: (shade = !shade) });
-      dataRow("Teknik Hakimiyet Ortalaması (/5)", ev.teknikHakimiyetOrt, { shade: (shade = !shade) });
-      dataRow("Genel Değerlendirme Sonucu", ev.potansiyelDegerlendirme, { shade: (shade = !shade) });
+      dataRow("Performans Sınıfı", ev.performansSinifi || sinifLabel(performansSkoru(ev)), { shade: (shade = !shade) });
 
-      sectionRow("Gelişim ve Planlama");
+      sectionRow("Planlama (Bağımsız Değerlendirmeler)");
       shade = false;
       dataRow("Hazır Olma Süresi", ev.hazirOlmaSuresi, { shade: (shade = !shade) });
       dataRow("Ayrılma Riski", ev.ayrilmaRiski, { shade: (shade = !shade) });
@@ -1203,8 +1204,7 @@ async function exportSinglePersonExcel(emp, ev) {
       dataRow("Fonksiyonel Geçişe Uygun mu?", ev.fonksiyonelGecisUygun, { shade: (shade = !shade) });
       dataRow("Uygun Departman / Rol", ev.fonksiyonelGecisDept, { shade: (shade = !shade) });
       dataRow("Gelişim Alanları", ev.gelisimAlanlari, { shade: (shade = !shade), height: 30 });
-      dataRow("Önerilen Eğitimler", (ev.egitimOnerileri || []).join(" · "), { shade: (shade = !shade), height: 30 });
-      dataRow("Gerekçe", ev.gerekce, { shade: (shade = !shade), height: 46 });
+      dataRow("Gerekçe (Yönetici)", ev.gerekce, { shade: (shade = !shade), height: 46 });
       dataRow("Bilgiyi Giren", `${ev.submittedByName || "—"} (${ev.updatedAt?.toDate ? ev.updatedAt.toDate().toLocaleDateString("tr-TR") : "—"})`, { shade: (shade = !shade) });
     }
 
@@ -1432,7 +1432,7 @@ const ADMIN_COLUMNS = [
   { key: "potansiyelDegerlendirme", label: "Değerlendirme", get: (e, ev) => ev?.potansiyelDegerlendirme || "" },
   { key: "yetenekHavuzuAlinmali", label: "Yetenek<br>Havuzu", get: (e, ev) => ev?.yetenekHavuzuAlinmali || "" },
   { key: "liderlikPotansiyeli", label: "Liderlik<br>Potansiyeli", get: (e, ev) => ev?.liderlikPotansiyeli || "" },
-  { key: "teknikHakimiyetOrt", label: "Teknik<br>Hakimiyet", get: (e, ev) => (ev?.teknikHakimiyetOrt ?? -1) },
+  { key: "sistemOneri", label: "Sistem<br>Önerisi", get: (e, ev) => (ev ? (sistemOnerisi(ev) || "") : "") },
   { key: "hazirOlmaSuresi", label: "Hazır Olma<br>Süresi", get: (e, ev) => ev?.hazirOlmaSuresi || "" },
   { key: "ayrilmaRiski", label: "Ayrılma<br>Riski", get: (e, ev) => ev?.ayrilmaRiski || "" },
   { key: "fonksiyonelGecisUygun", label: "Fonk. Geçişe<br>Uygun mu", get: (e, ev) => ev?.fonksiyonelGecisUygun || "" },
@@ -1550,7 +1550,7 @@ function renderAdmin() {
 
       <div class="box9-wrap">
         <h3 style="margin:0 0 4px">9-Grid · İnsanlar Üzerine Değerlendirme</h3>
-        <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft)">Değerlendirmesi tamamlanan <b>${yerlesenSayi}</b> personel, <b>Performans</b> (teknik hakimiyet + ek performans kriterleri) ve <b>Liderlik Potansiyeli</b> (potansiyel yetkinlikleri + öğrenme çevikliği + ek potansiyel kriterleri) puanlarına göre otomatik yerleştirilir. Her kutunun açıklaması, o gruba <i>neden</i> dahil olunduğunu anlatır — kılavuz niteliğindedir. Kutuya tıklayınca kişiler listelenir.</p>
+        <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft)">Değerlendirmesi tamamlanan <b>${yerlesenSayi}</b> personel, <b>Performans</b> (T–AH bloğu · Düşük/Orta/Yüksek) ve <b>Liderlik Potansiyeli</b> (Potansiyel yetkinlikleri %60 + Öğrenme Çevikliği %40) puanlarına göre otomatik yerleştirilir. Her kutunun açıklaması, o gruba <i>neden</i> dahil olunduğunu anlatır — kılavuz niteliğindedir. Kutuya tıklayınca kişiler listelenir.</p>
         <div style="display:flex;gap:10px;align-items:stretch">
           <div style="writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;font-weight:700;color:var(--navy);font-size:12.5px;letter-spacing:.04em;padding:4px 0">LİDERLİK POTANSİYELİ →</div>
           <div style="flex:1;overflow-x:auto">
@@ -1719,7 +1719,7 @@ function renderAdmin() {
         <td style="font-size:10px">${ev?.potansiyelDegerlendirme || "—"}</td>
         <td>${ev?.yetenekHavuzuAlinmali || "—"}</td>
         <td>${ev?.liderlikPotansiyeli || "—"}</td>
-        <td>${ev?.teknikHakimiyetOrt ?? "—"}</td>
+        <td>${ev ? (sistemOnerisi(ev) || "—") : "—"}</td>
         <td>${ev?.hazirOlmaSuresi || "—"}</td>
         <td>${ev?.ayrilmaRiski || "—"}</td>
         <td>${ev?.fonksiyonelGecisUygun || "—"}</td>
@@ -1758,7 +1758,7 @@ function renderAdmin() {
 }
 
 function exportCsv() {
-  const headers = ["Ad Soyad", "Departman", "Bölüm", "Unvan", "Müdür", "Kıdem", "Durum", "9-Grid Grubu", "Liderlik Pot. (eksen)", "Performans (eksen)", "Ort. Potansiyel", "Öğr. Çeviklik %", "Teknik Hakimiyet", "Değerlendirme", "Yetenek Havuzuna Alınmalı", "Liderlik Potansiyeli", "Hazır Olma Süresi", "Ayrılma Riski", "Fonksiyonel Geçişe Uygun", "Fonksiyonel Geçiş Departman/Rol", "Yedekleyebileceği Pozisyon", "Gelişim Alanları", "Gerekçe", ...EK_KRITERLER.map(([, l]) => l)];
+  const headers = ["Ad Soyad", "Departman", "Bölüm", "Unvan", "Müdür", "Kıdem", "Durum", "9-Grid Grubu", "Liderlik Pot. (eksen)", "Performans (eksen)", "Ort. Potansiyel", "Öğr. Çeviklik %", "Performans Sınıfı", "Sistem Önerisi (Havuz)", "Sistem Gerekçesi", "Yönetici Görüşü (Havuz)", "Liderlik Potansiyeli", "Hazır Olma Süresi", "Ayrılma Riski", "Fonksiyonel Geçişe Uygun", "Fonksiyonel Geçiş Departman/Rol", "Yedekleyebileceği Pozisyon", "Gelişim Alanları", "Gerekçe (Yönetici)", ...PERFORMANS_FIELDS.map(([, l]) => l)];
   const rows = adminRoster().map((e) => {
     const ev = evaluationsMap[e.id] || {};
     const pos = gridPos(ev);
@@ -1767,10 +1767,11 @@ function exportCsv() {
       kidemDisi(e) ? "Kıdem<6ay (dışı)" : (ev.status || "bekliyor"),
       pos ? GRID9[pos.pot + "-" + pos.perf].baslik : "", pos ? POT_ETIKET[pos.pot] : "", pos ? PERF_ETIKET[pos.perf] : "",
       ev.ortalamaPotansiyel ?? "", ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) : "",
-      ev.teknikHakimiyetOrt ?? "", ev.potansiyelDegerlendirme || "", ev.yetenekHavuzuAlinmali || "", ev.liderlikPotansiyeli || "",
+      ev.performansSinifi || (ev.status ? sinifLabel(performansSkoru(ev)) : ""), (ev.status ? (sistemOnerisi(ev) || "") : ""), (ev.status ? sistemGerekce(ev) : "").replace(/\n/g, " "),
+      ev.yetenekHavuzuAlinmali || "", ev.liderlikPotansiyeli || "",
       ev.hazirOlmaSuresi || "", ev.ayrilmaRiski || "", ev.fonksiyonelGecisUygun || "", ev.fonksiyonelGecisDept || "",
       ev.yedekPozisyonlar || "", ev.gelisimAlanlari || "", (ev.gerekce || "").replace(/\n/g, " "),
-      ...EK_KRITERLER.map(([k]) => ev.ekKriterler?.[k] || "")
+      ...PERFORMANS_FIELDS.map(([k]) => ev.performans?.[k] || "")
     ];
   });
   const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
