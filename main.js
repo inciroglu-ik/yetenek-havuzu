@@ -839,7 +839,6 @@ function openEvalDrawer(emp) {
     return `
     <div class="summary-box">
       <div class="row"><span>Ortalama Potansiyel</span><b>${der.ortalamaPotansiyel} / 5</b></div>
-      <div class="row"><span>Öğrenme Çevikliği Oranı</span><b>${Math.round(der.ortalamaOgrenmeCevikligi * 100)}%</b></div>
       <div class="row"><span>Performans Sınıfı</span><b>${der.performansSinifi}</b></div>
       ${pos ? `<div class="row"><span>9-Grid Konumu</span><b>${GRID9[pos.pot + "-" + pos.perf].baslik}</b></div>` : ""}
       ${oneri ? `<div class="verdict ${oneri === "Evet" ? "ok" : "dev"}">Sistem Önerisi — Yetenek Havuzuna: ${oneri.toLocaleUpperCase("tr")}</div>` : ""}
@@ -1107,7 +1106,6 @@ function openAdminDetailDrawer(emp) {
 
     <div class="summary-box">
       <div class="row"><span>Ortalama Potansiyel</span><b>${ev.ortalamaPotansiyel ?? "—"} / 5</b></div>
-      <div class="row"><span>Öğrenme Çevikliği Oranı</span><b>${ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) + "%" : "—"}</b></div>
       <div class="row"><span>Performans Sınıfı</span><b>${ev.performansSinifi || sinifLabel(performansSkoru(ev))}</b></div>
     </div>
 
@@ -1163,6 +1161,7 @@ function openAdminDetailDrawer(emp) {
       </div>
       <div class="drawer-body">${bodyHtml()}</div>
       <div class="drawer-foot">
+        <button class="btn btn-ghost" id="printKarneA4">A4 Karne Yazdır</button>
         <button class="btn btn-brass" id="downloadPersonExcel">Excel Raporu İndir</button>
       </div>
     </div>`;
@@ -1170,6 +1169,7 @@ function openAdminDetailDrawer(emp) {
   overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
   el("#closeAdminDrawer").onclick = () => overlay.remove();
   el("#downloadPersonExcel").onclick = () => exportSinglePersonExcel(emp, ev);
+  el("#printKarneA4").onclick = () => karneYazdir([emp]);
 }
 
 // ---------------------------------------------------------------
@@ -1291,7 +1291,6 @@ async function exportSinglePersonExcel(emp, ev) {
       sectionRow("Hesaplanan Sonuçlar");
       shade = false;
       dataRow("Ortalama Potansiyel (/5)", ev.ortalamaPotansiyel, { shade: (shade = !shade) });
-      dataRow("Öğrenme Çevikliği Oranı", ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) + "%" : "—", { shade: (shade = !shade) });
       dataRow("Performans Sınıfı", ev.performansSinifi || sinifLabel(performansSkoru(ev)), { shade: (shade = !shade) });
 
       sectionRow("Planlama (Bağımsız Değerlendirmeler)");
@@ -1519,22 +1518,26 @@ async function downloadExecutivePdf(ctx) {
 // ---------------------------------------------------------------
 // ADMIN VIEW
 // ---------------------------------------------------------------
+function statusBadgeHtml(ev) {
+  const st = ev?.status || "bekliyor";
+  const l = st === "tamamlandi" ? "Tamamlandı" : st === "taslak" ? "Taslak" : "Bekliyor";
+  return `<span class="status-badge status-${st}">${l}</span>`;
+}
 const ADMIN_COLUMNS = [
-  { key: "adSoyad", label: "Ad Soyad", get: (e, ev) => e.adSoyad },
-  { key: "departman", label: "Departman", get: (e, ev) => e.departman || "" },
-  { key: "bolum", label: "Bölüm", get: (e, ev) => e.bolum || "" },
-  { key: "kidem", label: "Kıdem", get: (e, ev) => (e.kurumKidemiYil ?? -1) },
-  { key: "status", label: "Durum", get: (e, ev) => ev?.status || "bekliyor" },
-  { key: "ortalamaPotansiyel", label: "Ort. Potansiyel<br>(9 yetkinlik)", get: (e, ev) => (ev?.ortalamaPotansiyel ?? -1) },
-  { key: "ortalamaOgrenmeCevikligi", label: "Öğr. Çevikliği<br>(5 yetkinlik)", get: (e, ev) => (ev?.ortalamaOgrenmeCevikligi ?? -1) },
-  { key: "potansiyelDegerlendirme", label: "Değerlendirme", get: (e, ev) => ev?.potansiyelDegerlendirme || "" },
-  { key: "yetenekHavuzuAlinmali", label: "Yetenek<br>Havuzu", get: (e, ev) => ev?.yetenekHavuzuAlinmali || "" },
-  { key: "liderlikPotansiyeli", label: "Liderlik<br>Potansiyeli", get: (e, ev) => ev?.liderlikPotansiyeli || "" },
-  { key: "sistemOneri", label: "Sistem<br>Önerisi", get: (e, ev) => (ev ? (sistemOnerisi(ev) || "") : "") },
-  { key: "hazirOlmaSuresi", label: "Hazır Olma<br>Süresi", get: (e, ev) => ev?.hazirOlmaSuresi || "" },
-  { key: "ayrilmaRiski", label: "Ayrılma<br>Riski", get: (e, ev) => ev?.ayrilmaRiski || "" },
-  { key: "fonksiyonelGecisUygun", label: "Fonk. Geçişe<br>Uygun mu", get: (e, ev) => ev?.fonksiyonelGecisUygun || "" },
-  { key: "fonksiyonelGecisDept", label: "Fonk. Geçiş<br>Dept/Rol", get: (e, ev) => ev?.fonksiyonelGecisDept || "" }
+  { key: "adSoyad", label: "Ad Soyad", get: (e, ev) => e.adSoyad, render: (e, ev) => `<button type="button" class="link-btn person-link" data-id="${e.id}" style="font-weight:700;text-align:left;font-size:inherit;font-family:inherit;color:var(--navy)">${e.adSoyad}</button>` },
+  { key: "departman", label: "Departman", get: (e, ev) => e.departman || "", render: (e, ev) => e.departman || "" },
+  { key: "bolum", label: "Bölüm", get: (e, ev) => e.bolum || "", render: (e, ev) => e.bolum || "" },
+  { key: "kidem", label: "Kıdem", get: (e, ev) => (e.kurumKidemiYil ?? -1), render: (e, ev) => formatKidem(e.kurumKidemiYil) },
+  { key: "gridKod", label: "9-Grid", get: (e, ev) => { const p = ev && gridPos(ev); return p ? (3 - p.pot) * 10 + (p.perf + 1) : -1; }, render: (e, ev) => { const p = ev && gridPos(ev); return p ? `<b>${gridKoord(p)}</b>` : "—"; } },
+  { key: "status", label: "Durum", get: (e, ev) => ev?.status || "bekliyor", render: (e, ev) => statusBadgeHtml(ev) },
+  { key: "ortalamaPotansiyel", label: "Ort.<br>Potansiyel", get: (e, ev) => (ev?.ortalamaPotansiyel ?? -1), render: (e, ev) => ev?.ortalamaPotansiyel ?? "—" },
+  { key: "performansSinifi", label: "Performans<br>Sınıfı", get: (e, ev) => ev?.performansSinifi || "", render: (e, ev) => `<span style="font-size:10px">${ev?.performansSinifi || "—"}</span>` },
+  { key: "yetenekHavuzuAlinmali", label: "Yetenek<br>Havuzu", get: (e, ev) => ev?.yetenekHavuzuAlinmali || "", render: (e, ev) => ev?.yetenekHavuzuAlinmali || "—" },
+  { key: "liderlikPotansiyeli", label: "Liderlik<br>Potansiyeli", get: (e, ev) => ev?.liderlikPotansiyeli || "", render: (e, ev) => ev?.liderlikPotansiyeli || "—" },
+  { key: "sistemOneri", label: "Sistem<br>Önerisi", get: (e, ev) => (ev ? (sistemOnerisi(ev) || "") : ""), render: (e, ev) => { const o = ev ? sistemOnerisi(ev) : null; return o ? `<b style="color:${o === "Evet" ? "var(--good)" : "var(--bad)"}">${o}</b>` : "—"; } },
+  { key: "hazirOlmaSuresi", label: "Hazır Olma<br>Süresi", get: (e, ev) => ev?.hazirOlmaSuresi || "", render: (e, ev) => ev?.hazirOlmaSuresi || "—" },
+  { key: "ayrilmaRiski", label: "Ayrılma<br>Riski", get: (e, ev) => ev?.ayrilmaRiski || "", render: (e, ev) => ev?.ayrilmaRiski || "—" },
+  { key: "fonksiyonelGecisUygun", label: "Fonk. Geçişe<br>Uygun mu", get: (e, ev) => ev?.fonksiyonelGecisUygun || "", render: (e, ev) => ev?.fonksiyonelGecisUygun || "—" }
 ];
 
 function renderAdmin() {
@@ -1716,16 +1719,32 @@ function renderAdmin() {
           <option value="0-1 yıl">0-1 yıl</option>
           <option value="1-2 Yıl">1-2 Yıl</option>
         </select>
+        <select id="havuzFilter">
+          <option value="">Yetenek Havuzu (Yönetici) — Hepsi</option>
+          <option value="Evet">Havuza: Evet</option>
+          <option value="Hayır">Havuza: Hayır</option>
+        </select>
+        <select id="oneriFilter">
+          <option value="">Sistem Önerisi — Hepsi</option>
+          <option value="Evet">Öneri: Evet</option>
+          <option value="Hayır">Öneri: Hayır</option>
+        </select>
+        <select id="liderlikFilter">
+          <option value="">Liderlik — Hepsi</option>
+          <option value="Var">Liderlik: Var</option>
+          <option value="Yok">Liderlik: Yok</option>
+        </select>
+        <select id="gridFilter">
+          <option value="">9-Grid — Hepsi</option>
+          ${Object.keys(GRID9).map((k) => { const pt = Number(k.split("-")[0]), pf = Number(k.split("-")[1]); return `<option value="${k}">${(3 - pt)}-${(pf + 1)} · ${GRID9[k].baslik}</option>`; }).join("")}
+        </select>
+        <button class="btn btn-brass btn-sm" id="topluKarneBtn">Listeyi A4 Karne Yazdır</button>
       </div>
-      <div class="table-scroll no-x-scroll">
-        <table class="admin-table">
-          <colgroup>
-            <col style="width:10%"><col style="width:6%"><col style="width:6%"><col style="width:7%"><col style="width:8%">
-            <col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:6%"><col style="width:7%">
-            <col style="width:5%"><col style="width:7%"><col style="width:5%"><col style="width:6%"><col style="width:5%">
-          </colgroup>
+      <div class="table-scroll">
+        <table class="admin-table" style="min-width:1050px">
           <thead><tr>
             ${ADMIN_COLUMNS.map((c) => `<th data-key="${c.key}">${c.label} <span class="sort-ind" data-key="${c.key}"></span></th>`).join("")}
+            <th>Karne</th>
           </tr></thead>
           <tbody id="tbody"></tbody>
         </table>
@@ -1777,6 +1796,7 @@ function renderAdmin() {
 
   let sortState = { key: "adSoyad", dir: 1 };
 
+  let sonFiltreli = [];
   function draw() {
     const term = el("#searchBox").value.trim().toLocaleLowerCase("tr");
     const mgrF = el("#managerFilter").value;
@@ -1784,58 +1804,50 @@ function renderAdmin() {
     const stF = el("#statusFilter").value;
     const riskF = el("#riskFilter").value;
     const readyF = el("#readyFilter").value;
+    const havuzF = el("#havuzFilter").value;
+    const oneriF = el("#oneriFilter").value;
+    const liderF = el("#liderlikFilter").value;
+    const gridF = el("#gridFilter").value;
     const col = ADMIN_COLUMNS.find((c) => c.key === sortState.key);
     const list = roster
       .filter((e) => e.adSoyad.toLocaleLowerCase("tr").includes(term))
       .filter((e) => !mgrF || e.muduluk === mgrF)
       .filter((e) => !deptF || e.departman === deptF)
-      .filter((e) => {
-        const st = evaluationsMap[e.id]?.status || "bekliyor";
-        return !stF || st === stF;
-      })
+      .filter((e) => { const st = evaluationsMap[e.id]?.status || "bekliyor"; return !stF || st === stF; })
       .filter((e) => !riskF || evaluationsMap[e.id]?.ayrilmaRiski === riskF)
       .filter((e) => !readyF || evaluationsMap[e.id]?.hazirOlmaSuresi === readyF)
+      .filter((e) => !havuzF || evaluationsMap[e.id]?.yetenekHavuzuAlinmali === havuzF)
+      .filter((e) => !oneriF || (evaluationsMap[e.id] && sistemOnerisi(evaluationsMap[e.id]) === oneriF))
+      .filter((e) => !liderF || evaluationsMap[e.id]?.liderlikPotansiyeli === liderF)
+      .filter((e) => { if (!gridF) return true; const p = evaluationsMap[e.id] && gridPos(evaluationsMap[e.id]); return p && (p.pot + "-" + p.perf) === gridF; })
       .sort((a, b) => {
         const va = col.get(a, evaluationsMap[a.id]);
         const vb = col.get(b, evaluationsMap[b.id]);
         const cmp = (typeof va === "number" && typeof vb === "number") ? va - vb : String(va).localeCompare(String(vb), "tr");
         return sortState.dir * cmp;
       });
+    sonFiltreli = list;
 
     el("#tbody").innerHTML = list.map((e) => {
       const ev = evaluationsMap[e.id];
-      const st = ev?.status || "bekliyor";
-      const stLabel = st === "tamamlandi" ? "Tamamlandı" : st === "taslak" ? "Taslak" : "Bekliyor";
-      return `<tr>
-        <td><button type="button" class="link-btn person-link" data-id="${e.id}" style="font-weight:700;text-align:left;font-size:inherit;font-family:inherit;color:var(--navy)">${e.adSoyad}</button></td>
-        <td>${e.departman || ""}</td>
-        <td>${e.bolum || ""}</td>
-        <td>${formatKidem(e.kurumKidemiYil)}</td>
-        <td><span class="status-badge status-${st}">${stLabel}</span></td>
-        <td>${ev?.ortalamaPotansiyel ?? "—"}</td>
-        <td>${ev ? Math.round((ev.ortalamaOgrenmeCevikligi || 0) * 100) + "%" : "—"}</td>
-        <td style="font-size:10px">${ev?.potansiyelDegerlendirme || "—"}</td>
-        <td>${ev?.yetenekHavuzuAlinmali || "—"}</td>
-        <td>${ev?.liderlikPotansiyeli || "—"}</td>
-        <td>${ev ? (sistemOnerisi(ev) || "—") : "—"}</td>
-        <td>${ev?.hazirOlmaSuresi || "—"}</td>
-        <td>${ev?.ayrilmaRiski || "—"}</td>
-        <td>${ev?.fonksiyonelGecisUygun || "—"}</td>
-        <td>${ev?.fonksiyonelGecisDept || "—"}</td>
-      </tr>`;
-    }).join("") || `<tr><td colspan="15" class="empty-state">Kayıt bulunamadı.</td></tr>`;
+      return `<tr>${ADMIN_COLUMNS.map((c) => `<td>${c.render(e, ev)}</td>`).join("")}<td><button type="button" class="link-btn karne-print" data-id="${e.id}" style="color:var(--brass);font-weight:600">A4</button></td></tr>`;
+    }).join("") || `<tr><td colspan="${ADMIN_COLUMNS.length + 1}" class="empty-state">Kayıt bulunamadı.</td></tr>`;
 
     document.querySelectorAll(".person-link").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const emp = findEmpById(btn.dataset.id);
-        if (emp) openAdminDetailDrawer(emp);
-      });
+      btn.addEventListener("click", () => { const emp = findEmpById(btn.dataset.id); if (emp) openAdminDetailDrawer(emp); });
     });
-
+    document.querySelectorAll(".karne-print").forEach((btn) => {
+      btn.addEventListener("click", () => { const emp = findEmpById(btn.dataset.id); if (emp) karneYazdir([emp]); });
+    });
     document.querySelectorAll(".sort-ind").forEach((s) => {
       s.textContent = s.dataset.key === sortState.key ? (sortState.dir === 1 ? "▲" : "▼") : "";
     });
   }
+  const topluBtn = el("#topluKarneBtn");
+  if (topluBtn) topluBtn.addEventListener("click", () => {
+    if (!sonFiltreli.length) { toast("Yazdırılacak kayıt yok."); return; }
+    karneYazdir(sonFiltreli);
+  });
 
   document.querySelectorAll("table.admin-table th[data-key]").forEach((th) => {
     th.addEventListener("click", () => {
@@ -1846,7 +1858,7 @@ function renderAdmin() {
     });
   });
 
-  ["searchBox", "managerFilter", "deptFilter", "statusFilter", "riskFilter", "readyFilter"].forEach((id) => {
+  ["searchBox", "managerFilter", "deptFilter", "statusFilter", "riskFilter", "readyFilter", "havuzFilter", "oneriFilter", "liderlikFilter", "gridFilter"].forEach((id) => {
     el("#" + id).addEventListener("input", draw);
     el("#" + id).addEventListener("change", draw);
   });
@@ -1855,8 +1867,108 @@ function renderAdmin() {
   el("#exportCsv").addEventListener("click", exportCsv);
 }
 
+// ---------------------------------------------------------------
+// A4 KİŞİYE ÖZEL KARNE (yazdırılabilir) — tek veya toplu
+// ---------------------------------------------------------------
+function karneYazdir(empList) {
+  const esc = (s) => String(s == null ? "—" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const kutu = (baslik, ic) => `<div class="k-box"><div class="k-h">${baslik}</div>${ic}</div>`;
+  const ikili = (rows) => `<div class="k-grid">${rows.map(([l, v]) => `<div class="k-row"><span>${l}</span><b>${esc(v)}</b></div>`).join("")}</div>`;
+
+  const sayfalar = empList.map((emp) => {
+    const ev = evaluationsMap[emp.id] || {};
+    const dolu = !!ev.status;
+    const pos = dolu ? gridPos(ev) : null;
+    const cell = pos ? GRID9[pos.pot + "-" + pos.perf] : null;
+    const oneri = pos ? sistemOnerisi(ev) : null;
+    const potRows = POTANSIYEL_FIELDS.map(([k, l]) => [l, scoreLabelText(ev.potansiyel?.[k])]);
+    const perfRows = PERFORMANS_FIELDS.map(([k, l]) => [l, ev.performans?.[k] || "—"]);
+    const cevRows = CEVIKLIK_FIELDS.map(([k, l]) => [l, ev.ogrenmeCevikligi?.[k] === true ? "Var" : ev.ogrenmeCevikligi?.[k] === false ? "Yok" : "—"]);
+    const planRows = [
+      ["Hazır Olma Süresi", ev.hazirOlmaSuresi], ["Ayrılma Riski", ev.ayrilmaRiski],
+      ["Yedekleyebileceği Pozisyonlar", ev.yedekPozisyonlar], ["Fonksiyonel Geçişe Uygun mu?", ev.fonksiyonelGecisUygun],
+      ["Uygun Departman / Rol", ev.fonksiyonelGecisDept], ["Liderlik Potansiyeli", ev.liderlikPotansiyeli],
+      ["Yetenek Havuzuna Alınmalı (Yönetici)", ev.yetenekHavuzuAlinmali]
+    ];
+    return `<section class="karne">
+      <div class="k-top">
+        <div class="k-mark">İH</div>
+        <div class="k-title">
+          <div class="k-name">${esc(emp.adSoyad)}</div>
+          <div class="k-sub">${esc(emp.mevcutUnvan)} · ${esc(emp.departman)} / ${esc(emp.bolum)} · Müdür: ${esc(emp.muduluk || "—")} · Kıdem: ${esc(formatKidem(emp.kurumKidemiYil))}</div>
+        </div>
+        <div class="k-brand">Yetenek Havuzu Karnesi<br><span>İnciroğlu Otomotiv · İK · ${new Date().toLocaleDateString("tr-TR")}</span></div>
+      </div>
+      ${!dolu ? `<div class="k-empty">Bu personel için değerlendirme henüz girilmemiştir.</div>` : `
+      <div class="k-grid9">
+        <div class="k-g9-l">
+          <div class="k-g9-code">9-Grid: ${pos ? gridKoord(pos) : "—"}</div>
+          <div class="k-g9-name">${cell ? cell.baslik : "—"}</div>
+          <div class="k-g9-ax">Liderlik Potansiyeli: <b>${pos ? POT_ETIKET[pos.pot] : "—"}</b> · Performans: <b>${pos ? PERF_ETIKET[pos.perf] : "—"}</b></div>
+          ${cell ? `<ul class="k-g9-desc">${cell.aciklama.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>` : ""}
+        </div>
+        <div class="k-g9-r ${oneri === "Evet" ? "evet" : "hayir"}">
+          <div class="k-g9-oneri-l">Sistem Önerisi</div>
+          <div class="k-g9-oneri-v">${(oneri || "—").toLocaleUpperCase("tr")}</div>
+          <div class="k-g9-oneri-s">Yetenek Havuzuna</div>
+        </div>
+      </div>
+      <div class="k-gerekce"><b>Sistem Gerekçesi:</b> ${esc(pos ? sistemGerekce(ev) : "")}</div>
+      <div class="k-cols">
+        ${kutu("Potansiyel Yetkinlikleri (1–5) · Ort: " + (ev.ortalamaPotansiyel ?? "—"), ikili(potRows))}
+        ${kutu("Performans (Düşük / Orta / Yüksek) · Sınıf: " + (ev.performansSinifi || "—"), ikili(perfRows))}
+        ${kutu("Öğrenme Çevikliği (Var / Yok)", ikili(cevRows))}
+        ${kutu("Planlama ve Yönlendirme", ikili(planRows))}
+      </div>
+      ${ev.gelisimAlanlari ? `<div class="k-note"><b>Gelişim Alanları:</b> ${esc(ev.gelisimAlanlari)}</div>` : ""}
+      ${ev.gerekce ? `<div class="k-note"><b>Müdür Görüşü:</b> ${esc(ev.gerekce)}</div>` : ""}
+      `}
+    </section>`;
+  }).join("");
+
+  const css = `
+    @page { size: A4; margin: 11mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1c2530; margin: 0; }
+    .karne { page-break-after: always; padding: 0; }
+    .karne:last-child { page-break-after: auto; }
+    .k-top { display: flex; align-items: center; gap: 12px; border-bottom: 3px solid #a9772c; padding-bottom: 10px; }
+    .k-mark { width: 46px; height: 46px; background: #233047; color: #fff; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; flex: none; }
+    .k-title { flex: 1; }
+    .k-name { font-size: 20px; font-weight: 800; color: #233047; }
+    .k-sub { font-size: 10.5px; color: #555; margin-top: 2px; }
+    .k-brand { text-align: right; font-size: 10.5px; font-weight: 700; color: #a9772c; }
+    .k-brand span { font-weight: 400; color: #777; font-size: 9px; }
+    .k-grid9 { display: flex; gap: 10px; margin-top: 12px; }
+    .k-g9-l { flex: 1; border: 1px solid #d9d3c6; border-left: 5px solid #233047; border-radius: 8px; padding: 9px 12px; }
+    .k-g9-code { font-size: 15px; font-weight: 800; color: #233047; }
+    .k-g9-name { font-size: 13px; font-weight: 700; color: #a9772c; margin-bottom: 3px; }
+    .k-g9-ax { font-size: 10px; color: #444; }
+    .k-g9-desc { margin: 6px 0 0; padding-left: 16px; font-size: 9.5px; color: #333; line-height: 1.35; }
+    .k-g9-r { width: 150px; flex: none; border-radius: 8px; padding: 9px; text-align: center; color: #fff; display: flex; flex-direction: column; justify-content: center; }
+    .k-g9-r.evet { background: #2e7d4f; } .k-g9-r.hayir { background: #a13030; }
+    .k-g9-oneri-l { font-size: 10px; opacity: .9; } .k-g9-oneri-v { font-size: 26px; font-weight: 800; line-height: 1; } .k-g9-oneri-s { font-size: 10px; opacity: .9; }
+    .k-gerekce { margin-top: 9px; font-size: 10.5px; line-height: 1.45; background: #faf8f3; border: 1px solid #e2ddd2; border-radius: 7px; padding: 8px 11px; }
+    .k-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 9px; }
+    .k-box { border: 1px solid #e2ddd2; border-radius: 7px; overflow: hidden; break-inside: avoid; }
+    .k-h { background: #233047; color: #fff; font-size: 10.5px; font-weight: 700; padding: 5px 9px; }
+    .k-grid { padding: 5px 9px; }
+    .k-row { display: flex; justify-content: space-between; gap: 8px; font-size: 9.8px; padding: 2.5px 0; border-bottom: 1px dotted #eee; }
+    .k-row span { color: #555; } .k-row b { color: #1c2530; text-align: right; }
+    .k-note { margin-top: 8px; font-size: 10px; line-height: 1.45; border-left: 3px solid #a9772c; padding: 4px 10px; background: #fbfaf7; }
+    .k-empty { margin-top: 30px; text-align: center; color: #888; font-size: 13px; }
+  `;
+  const html = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Yetenek Havuzu Karnesi</title><style>${css}</style></head><body>${sayfalar}</body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) { toast("Yazdırma penceresi açılamadı. Tarayıcıda açılır pencerelere (popup) izin verin."); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => { try { w.print(); } catch (e) {} }, 500);
+}
+
 function exportCsv() {
-  const headers = ["Ad Soyad", "Departman", "Bölüm", "Unvan", "Müdür", "Kıdem", "Durum", "9-Grid Kod", "9-Grid Grubu", "Liderlik Pot. (eksen)", "Performans (eksen)", "Ort. Potansiyel", "Öğr. Çeviklik %", "Performans Sınıfı", "Sistem Önerisi (Havuz)", "Sistem Gerekçesi", "Yönetici Görüşü (Havuz)", "Liderlik Potansiyeli", "Hazır Olma Süresi", "Ayrılma Riski", "Fonksiyonel Geçişe Uygun", "Fonksiyonel Geçiş Departman/Rol", "Yedekleyebileceği Pozisyon", "Gelişim Alanları", "Gerekçe (Yönetici)", ...PERFORMANS_FIELDS.map(([, l]) => l)];
+  const headers = ["Ad Soyad", "Departman", "Bölüm", "Unvan", "Müdür", "Kıdem", "Durum", "9-Grid Kod", "9-Grid Grubu", "Liderlik Pot. (eksen)", "Performans (eksen)", "Ort. Potansiyel", "Performans Sınıfı", "Sistem Önerisi (Havuz)", "Sistem Gerekçesi", "Yönetici Görüşü (Havuz)", "Liderlik Potansiyeli", "Hazır Olma Süresi", "Ayrılma Riski", "Fonksiyonel Geçişe Uygun", "Fonksiyonel Geçiş Departman/Rol", "Yedekleyebileceği Pozisyon", "Gelişim Alanları", "Gerekçe (Yönetici)", ...PERFORMANS_FIELDS.map(([, l]) => l)];
   const rows = adminRoster().map((e) => {
     const ev = evaluationsMap[e.id] || {};
     const pos = gridPos(ev);
@@ -1864,7 +1976,7 @@ function exportCsv() {
       e.adSoyad, e.departman, e.bolum, e.mevcutUnvan, e.muduluk || "", formatKidem(e.kurumKidemiYil),
       kidemDisi(e) ? "Kıdem<6ay (dışı)" : (ev.status || "bekliyor"),
       pos ? gridKoord(pos) : "", pos ? GRID9[pos.pot + "-" + pos.perf].baslik : "", pos ? POT_ETIKET[pos.pot] : "", pos ? PERF_ETIKET[pos.perf] : "",
-      ev.ortalamaPotansiyel ?? "", ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) : "",
+      ev.ortalamaPotansiyel ?? "",
       ev.performansSinifi || (ev.status ? sinifLabel(performansSkoru(ev)) : ""), (ev.status ? (sistemOnerisi(ev) || "") : ""), (ev.status ? sistemGerekce(ev) : "").replace(/\n/g, " "),
       ev.yetenekHavuzuAlinmali || "", ev.liderlikPotansiyeli || "",
       ev.hazirOlmaSuresi || "", ev.ayrilmaRiski || "", ev.fonksiyonelGecisUygun || "", ev.fonksiyonelGecisDept || "",
