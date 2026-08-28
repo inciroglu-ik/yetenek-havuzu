@@ -267,7 +267,8 @@ let currentUid = null;
 let currentProfile = null; // { isAdmin, adSoyad, muduluk, direktorluk, roller, username }
 let employeesCache = [];   // from Firestore 'employees'
 let allEvalsMap = {};      // docId -> evaluation doc (tüm dönemler)
-let evaluationsMap = {};   // employeeId -> evaluation doc (SEÇİLİ dönem)
+let evaluationsMap = {};   // employeeId -> GÜNCEL (taze) değerlendirme
+let arsivMap = {};         // employeeId -> ARŞİV (eski/içe aktarılan) değerlendirme — sadece admin
 let unsubEval = null;
 let unsubEmp = null;
 
@@ -295,25 +296,27 @@ function evalDahaYeni(a, b) {
   if (ta !== tb) return ta > tb;
   return !!a.donem && !b.donem;
 }
-// Bir kişinin ESKİ (ilk) değerlendirmesini isimle bul (yeni kayıt olsa bile arşivden)
-function eskiEvalBul(adSoyad) {
-  const nk = nameKey(adSoyad || "");
-  let best = null;
-  Object.values(allEvalsMap).forEach((e) => {
-    if (nameKey(e.adSoyad || "") !== nk) return;
-    if (eskiDegerlendirmeVar(e) && (!best || evalDahaYeni(e, best))) best = e;
-  });
-  return best;
+// Bir değerlendirme ARŞİV mi? (eski model, içe aktarılan veya arsiv işaretli)
+// Arşiv kayıtları müdürlere gösterilmez; sadece admin karnesinde "İlk Değerlendirme" olarak görünür.
+function evalArsivMi(ev) {
+  return !!(ev && (ev.arsiv === true || ev.submittedByName === "Excel'den İçe Aktarıldı" || eskiDegerlendirmeVar(ev)));
 }
 
-// Tüm değerlendirmeleri (eski + yeni) tek yıl havuzunda birleştir; güncel roster'a İSİMLE eşle.
+// GÜNCEL (taze) değerlendirmeler — müdürlerin bu dönemde girdiği; arşiv HARİÇ.
+// arsivMap: kişi bazında en güncel arşiv kaydı (yalnızca admin karnesinde gösterilir).
 function rebuildEvalMap() {
   evaluationsMap = {};
+  arsivMap = {};
   const nameToId = {};
   employeesCache.forEach((e) => { if (e.adSoyad) nameToId[nameKey(e.adSoyad)] = e.id; });
   Object.values(allEvalsMap).forEach((ev) => {
     const nk = nameKey(ev.adSoyad || "");
     const key = nameToId[nk] || ev.employeeId || ev.id;
+    if (evalArsivMi(ev)) {
+      const c = arsivMap[key];
+      if (!c || evalDahaYeni(ev, c)) arsivMap[key] = ev;
+      return; // arşiv güncel havuza girmez
+    }
     const cur = evaluationsMap[key];
     if (!cur || evalDahaYeni(ev, cur)) evaluationsMap[key] = ev;
   });
@@ -1086,7 +1089,7 @@ function scoreLabelText(v) {
 
 function openAdminDetailDrawer(emp) {
   const ev = evaluationsMap[emp.id];
-  const eskiEv = currentProfile.isAdmin ? eskiEvalBul(emp.adSoyad) : null;
+  const eskiEv = currentProfile.isAdmin ? arsivMap[emp.id] : null;
 
   const overlay = document.createElement("div");
   overlay.className = "overlay";
@@ -1159,18 +1162,33 @@ function openAdminDetailDrawer(emp) {
   function eskiBlokHtml() {
     if (!eskiEv) return "";
     const e = eskiEv;
-    return `
-    <div class="section-title" style="margin-top:26px;background:#eef0f4;color:var(--navy);padding:7px 10px;border-radius:6px">İlk Değerlendirme (Eski Metrikler) — yalnızca İK görür</div>
-    <p style="font-size:12px;color:var(--ink-soft);margin:6px 0 4px">Bu kişinin önceki dönem eski metriklerle doldurulmuş değerlendirmesidir; arşiv amaçlı gösterilir. ${e.updatedAt?.toDate ? "(" + e.updatedAt.toDate().toLocaleDateString("tr-TR") + ")" : ""}</p>
-    ${ESKI_POTANSIYEL_FIELDS.some(([k]) => e.potansiyel?.[k] != null) ? `<div class="section-title">İlk Değ. · Potansiyel Yetkinlikleri</div>
-      ${ESKI_POTANSIYEL_FIELDS.map(([k, l]) => e.potansiyel?.[k] != null ? rowHtml(l, scoreLabelText(e.potansiyel[k])) : "").join("")}` : ""}
-    ${e.teknikHakimiyet ? `<div class="section-title">İlk Değ. · Teknik Hakimiyet</div>
-      ${ESKI_TEKNIK_FIELDS.map(([k, l]) => rowHtml(l, scoreLabelText(e.teknikHakimiyet?.[k]))).join("")}` : ""}
-    ${e.ekKriterler ? `<div class="section-title">İlk Değ. · Ek Kriterler</div>
-      ${ESKI_EK_KRITERLER.map(([k, l]) => e.ekKriterler?.[k] ? rowHtml(l, e.ekKriterler[k]) : "").join("")}` : ""}
-    ${(e.egitimOnerileri && e.egitimOnerileri.length) ? `<div class="comp-row"><div class="q">İlk Değ. · Önerilen Eğitimler</div><div style="font-size:13px;color:var(--ink)">${e.egitimOnerileri.map((t) => `<span class="tag">${t}</span>`).join(" ")}</div></div>` : ""}
-    ${e.teknikHakimiyetOrt != null ? rowHtml("İlk Değ. · Teknik Hakimiyet Ort.", (e.teknikHakimiyetOrt ?? "—") + " / 5") : ""}
-    ${e.gerekce ? `<div class="comp-row"><div class="q">İlk Değ. · Gerekçe</div><div style="font-size:13px;color:var(--ink);white-space:pre-wrap">${e.gerekce}</div></div>` : ""}`;
+    const yeniModel = !!e.performans;
+    const tarih = e.updatedAt?.toDate ? "(" + e.updatedAt.toDate().toLocaleDateString("tr-TR") + ")" : "";
+    const bas = `<div class="section-title" style="margin-top:26px;background:#eef0f4;color:var(--navy);padding:7px 10px;border-radius:6px">İlk Değerlendirme (Arşiv) — yalnızca İK görür</div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:6px 0 4px">Bu kişinin önceki/ilk değerlendirmesidir; olduğu gibi saklanır, düzenlenmez. Müdürler bu veriyi görmez. ${tarih}</p>`;
+    if (yeniModel) {
+      const pos = gridPos(e);
+      return bas +
+        (pos ? rowHtml("İlk Değ. · 9-Grid", `${gridKoord(pos)} — ${GRID9[pos.pot + "-" + pos.perf].baslik}`) : "") +
+        (pos ? rowHtml("İlk Değ. · Sistem Önerisi", (sistemOnerisi(e) || "—").toLocaleUpperCase("tr")) : "") +
+        `<div class="section-title">İlk Değ. · Potansiyel Yetkinlikleri</div>` +
+        POTANSIYEL_FIELDS.map(([k, l]) => rowHtml(l, scoreLabelText(e.potansiyel?.[k]))).join("") +
+        `<div class="section-title">İlk Değ. · Performans</div>` +
+        PERFORMANS_FIELDS.map(([k, l]) => rowHtml(l, e.performans?.[k])).join("") +
+        `<div class="section-title">İlk Değ. · Öğrenme Çevikliği</div>` +
+        CEVIKLIK_FIELDS.map(([k, l]) => rowHtml(l, e.ogrenmeCevikligi?.[k] === true ? "Var" : e.ogrenmeCevikligi?.[k] === false ? "Yok" : "—")).join("") +
+        `<div class="section-title">İlk Değ. · Planlama</div>` +
+        rowHtml("Hazır Olma Süresi", e.hazirOlmaSuresi) + rowHtml("Ayrılma Riski", e.ayrilmaRiski) +
+        rowHtml("Yedekleyebileceği Pozisyonlar", e.yedekPozisyonlar) + rowHtml("Fonksiyonel Geçişe Uygun mu?", e.fonksiyonelGecisUygun) +
+        rowHtml("Uygun Departman / Rol", e.fonksiyonelGecisDept) + rowHtml("Liderlik Potansiyeli", e.liderlikPotansiyeli) +
+        rowHtml("Yetenek Havuzuna Alınmalı (Yönetici)", e.yetenekHavuzuAlinmali);
+    }
+    return bas +
+      (ESKI_POTANSIYEL_FIELDS.some(([k]) => e.potansiyel?.[k] != null) ? `<div class="section-title">İlk Değ. · Potansiyel Yetkinlikleri</div>` + ESKI_POTANSIYEL_FIELDS.map(([k, l]) => e.potansiyel?.[k] != null ? rowHtml(l, scoreLabelText(e.potansiyel[k])) : "").join("") : "") +
+      (e.teknikHakimiyet ? `<div class="section-title">İlk Değ. · Teknik Hakimiyet</div>` + ESKI_TEKNIK_FIELDS.map(([k, l]) => rowHtml(l, scoreLabelText(e.teknikHakimiyet?.[k]))).join("") : "") +
+      (e.ekKriterler ? `<div class="section-title">İlk Değ. · Ek Kriterler</div>` + ESKI_EK_KRITERLER.map(([k, l]) => e.ekKriterler?.[k] ? rowHtml(l, e.ekKriterler[k]) : "").join("") : "") +
+      ((e.egitimOnerileri && e.egitimOnerileri.length) ? `<div class="comp-row"><div class="q">İlk Değ. · Önerilen Eğitimler</div><div style="font-size:13px;color:var(--ink)">${e.egitimOnerileri.map((t) => `<span class="tag">${t}</span>`).join(" ")}</div></div>` : "") +
+      (e.gerekce ? `<div class="comp-row"><div class="q">İlk Değ. · Gerekçe</div><div style="font-size:13px;color:var(--ink);white-space:pre-wrap">${e.gerekce}</div></div>` : "");
   }
 
   overlay.innerHTML = `
@@ -2052,8 +2070,8 @@ function openManagePanel() {
           <p style="font-size:13px;color:var(--ink);margin-top:14px">Adım 2 — Giriş hesaplarını hazırlar (<b>${typeof HESAPLAR !== "undefined" ? HESAPLAR.length : 0}</b> müdür/direktör).</p>
           <button class="btn btn-ghost btn-sm" id="hesapAcBtn">Adım 2 — Giriş Hesaplarını Hazırla</button>
           <div id="hesapAcMsg" style="font-size:12.5px;margin-top:8px;white-space:pre-line"></div>
-          <p style="font-size:13px;color:var(--ink);margin-top:14px">Adım 3 — Excel'de (YETENEK HAVUZU.xlsx) dolu olan <b>${typeof EVAL_IMPORT !== "undefined" ? EVAL_IMPORT.length : 0}</b> değerlendirmeyi yeni metriklerle canlı sisteme aktarır. İsimle güncel roster'a eşleşir.</p>
-          <button class="btn btn-ghost btn-sm" id="importYeniBtn">Adım 3 — Excel Değerlendirmelerini Aktar</button>
+          <p style="font-size:13px;color:var(--ink);margin-top:14px">Adım 3 — Excel'de (YETENEK HAVUZU.xlsx) dolu olan <b>${typeof EVAL_IMPORT !== "undefined" ? EVAL_IMPORT.length : 0}</b> değerlendirmeyi <b>ARŞİVE</b> aktarır: yalnızca İK görür (karnede "İlk Değerlendirme"), müdürler görmez ve üzerine yazamaz. Müdürler sıfırdan doldurur.</p>
+          <button class="btn btn-ghost btn-sm" id="importYeniBtn">Adım 3 — Excel Değerlendirmelerini Arşive Aktar</button>
           <div id="importYeniMsg" style="font-size:12.5px;margin-top:8px;white-space:pre-line"></div>
         </div>
 
@@ -2189,7 +2207,7 @@ function openManagePanel() {
   if (importYeniBtn) importYeniBtn.onclick = async () => {
     const msg = el("#importYeniMsg");
     if (typeof EVAL_IMPORT === "undefined") { msg.style.color = "var(--bad)"; msg.textContent = "import-data.js yüklenemedi."; return; }
-    if (!confirm(`${EVAL_IMPORT.length} değerlendirme canlı sisteme aktarılacak. İsimle güncel roster'a eşleşenlerin ${DEF_AKTIF} kaydı oluşturulur/güncellenir. Devam?`)) return;
+    if (!confirm(`${EVAL_IMPORT.length} değerlendirme ARŞİVE aktarılacak (yalnızca İK görür; müdürler görmez, üzerine yazamaz). Devam?`)) return;
     importYeniBtn.disabled = true; importYeniBtn.textContent = "Aktarılıyor…"; msg.style.color = "var(--ink-soft)";
     try {
       const nameToEmp = {};
@@ -2208,24 +2226,32 @@ function openManagePanel() {
         };
         const der = computeDerived(d);
         const payload = {
-          employeeId: emp.id, donem: aktifDonem, adSoyad: emp.adSoyad,
+          employeeId: emp.id, donem: aktifDonem, arsiv: true, adSoyad: emp.adSoyad,
           departman: emp.departman || "", bolum: emp.bolum || "", unvan: emp.mevcutUnvan || "", muduluk: emp.muduluk || null,
           ...d, ...der, sistemGerekcesi: sistemGerekce({ ...d, ...der, adSoyad: emp.adSoyad }),
           status: isComplete(d) ? "tamamlandi" : "taslak",
           submittedByUid: currentUid, submittedByName: "Excel'den İçe Aktarıldı", updatedAt: serverTimestamp()
         };
-        ops.push((b) => b.set(doc(db, "evaluations", `${aktifDonem}::${emp.id}`), payload, { merge: true }));
+        // ARŞİV dokümanı ayrı id'de: ilk::{id} (müdürün taze kaydı 2026::{id} ile çakışmaz)
+        ops.push((b) => b.set(doc(db, "evaluations", `ilk::${emp.id}`), payload));
         ok++;
       });
-      for (let i = 0; i < ops.length; i += 400) {
+      // Önceki (yanlış konumdaki) içe aktarımları temizle: 2026::id'de duran import kayıtları
+      const temizle = [];
+      try {
+        const snap = await getDocs(collection(db, "evaluations"));
+        snap.forEach((dd) => { if (dd.id.indexOf("ilk::") !== 0 && dd.data().submittedByName === "Excel'den İçe Aktarıldı") temizle.push((b) => b.delete(doc(db, "evaluations", dd.id))); });
+      } catch (e) { console.warn(e); }
+      const hepsi = ops.concat(temizle);
+      for (let i = 0; i < hepsi.length; i += 400) {
         const b = writeBatch(db);
-        ops.slice(i, i + 400).forEach((fn) => fn(b));
+        hepsi.slice(i, i + 400).forEach((fn) => fn(b));
         await b.commit();
       }
       msg.style.color = "var(--good)";
       let ek = "";
       if (bulunamadi) ek = " " + bulunamadi + " kişi roster'da bulunamadı: " + eksikler.join(", ") + (bulunamadi > eksikler.length ? "…" : "");
-      msg.textContent = "✓ " + ok + " değerlendirme aktarıldı." + ek;
+      msg.textContent = "✓ " + ok + " değerlendirme ARŞİVE aktarıldı (İK görür, müdürler görmez)." + ek;
     } catch (e) {
       msg.style.color = "var(--bad)"; msg.textContent = "Hata: " + e.message;
     }
