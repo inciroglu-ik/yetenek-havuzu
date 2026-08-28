@@ -73,6 +73,30 @@ const PERFORMANS_FIELDS = [
 ];
 const DOY_OPTS = [{ v: "Düşük", l: "Düşük" }, { v: "Orta", l: "Orta" }, { v: "Yüksek", l: "Yüksek" }];
 
+// ESKİ (İlk Değerlendirme) metrikleri — SADECE admin görür, salt gösterim
+const ESKI_POTANSIYEL_FIELDS = [
+  ["musteriOdaklilik", "Müşteri Odaklılık"], ["belirsizlikYonetimi", "Belirsizliği Yönetmek"],
+  ["sonucOdaklilik", "Sonuç Odaklılık"], ["isbirligiGelistirme", "İş Birliği Geliştirmek"],
+  ["kisiselFarkindalik", "Kişisel Farkındalık Göstermek"], ["sorumlulukAlma", "Sorumluluk Almak"],
+  ["stratejikDusunme", "Stratejik Düşünme"], ["vizyonAmac", "Vizyon ve Amacı Sürdürmek"], ["guvenYaratma", "Güven Yaratma"]
+];
+const ESKI_TEKNIK_FIELDS = [
+  ["isBilgisi", "İş Bilgisi ve Mesleki Hakimiyet"], ["dijitalYetkinlik", "Dijital Yetkinlik"],
+  ["iknaMuzakere", "İkna ve Müzakere Gücü"], ["kurumsalDeger", "Kurumsal Değerlere Uyum ve Temsil"]
+];
+const ESKI_EK_KRITERLER = [
+  ["rolZorlukBasaCikma", "Rolünde Zorluklarla Başa Çıkma"], ["davranisIstikrar", "Davranışlarında İstikrarlı mı?"],
+  ["stresKapaliTutum", "Stres Altında Kapalı Tutum?"], ["meslekiBilgiBeceri", "Gerekli Mesleki Bilgi/Beceri?"],
+  ["yeterliDeneyim", "Yeterli Deneyim?"], ["isbirligiEgilim", "İş Birliği Eğilimi?"],
+  ["dogalLiderlik", "Doğal Liderlik?"], ["inisiyatifAlternatif", "İnisiyatif / Alternatif Üretme?"],
+  ["deneyimdenOgrenme", "Deneyimden Öğrenme?"], ["sonucaUlasmaKararli", "Sonuca Ulaşmada Kararlı?"]
+];
+// Bu değerlendirme eski model verisi içeriyor mu? (İlk Değerlendirme)
+function eskiDegerlendirmeVar(ev) {
+  return !!(ev && (ev.teknikHakimiyet || ev.ekKriterler || ev.egitimOnerileri ||
+    (ev.potansiyel && (ev.potansiyel.musteriOdaklilik != null || ev.potansiyel.sonucOdaklilik != null))));
+}
+
 // Kıdemi bu değerin altında (yıl) olanlar değerlendirme dışıdır (6 ay = 0.5)
 const KIDEM_ESIK = 0.5;
 function kidemDisi(emp) {
@@ -245,6 +269,16 @@ function evalDahaYeni(a, b) {
   const tb = b.updatedAt && b.updatedAt.toMillis ? b.updatedAt.toMillis() : 0;
   if (ta !== tb) return ta > tb;
   return !!a.donem && !b.donem;
+}
+// Bir kişinin ESKİ (ilk) değerlendirmesini isimle bul (yeni kayıt olsa bile arşivden)
+function eskiEvalBul(adSoyad) {
+  const nk = nameKey(adSoyad || "");
+  let best = null;
+  Object.values(allEvalsMap).forEach((e) => {
+    if (nameKey(e.adSoyad || "") !== nk) return;
+    if (eskiDegerlendirmeVar(e) && (!best || evalDahaYeni(e, best))) best = e;
+  });
+  return best;
 }
 
 // Tüm değerlendirmeleri (eski + yeni) tek yıl havuzunda birleştir; güncel roster'a İSİMLE eşle.
@@ -985,6 +1019,7 @@ function scoreLabelText(v) {
 
 function openAdminDetailDrawer(emp) {
   const ev = evaluationsMap[emp.id];
+  const eskiEv = currentProfile.isAdmin ? eskiEvalBul(emp.adSoyad) : null;
 
   const overlay = document.createElement("div");
   overlay.className = "overlay";
@@ -999,7 +1034,8 @@ function openAdminDetailDrawer(emp) {
   function bodyHtml() {
     if (!ev) {
       if (kidemDisi(emp)) return `<div class="empty-state">Bu personel <b>kıdemi 6 aydan az</b> olduğu için değerlendirme dışıdır; müdürüne metrikler doldurtulmaz.</div>`;
-      return `<div class="empty-state">Bu personel için henüz bir değerlendirme girilmedi.</div>`;
+      const bos = `<div class="empty-state">Bu personel için henüz (yeni metriklerle) değerlendirme girilmedi.</div>`;
+      return bos + eskiBlokHtml();
     }
     const pos = gridPos(ev);
     const oneri = sistemOnerisi(ev);
@@ -1048,7 +1084,25 @@ function openAdminDetailDrawer(emp) {
     <div class="comp-row">
       <div class="q">Bilgiyi Giren</div>
       <div style="font-size:13px;color:var(--ink-soft)">${ev.submittedByName || "—"} · ${ev.updatedAt?.toDate ? ev.updatedAt.toDate().toLocaleDateString("tr-TR") : "—"}</div>
-    </div>`;
+    </div>
+    ${eskiBlokHtml()}`;
+  }
+
+  function eskiBlokHtml() {
+    if (!eskiEv) return "";
+    const e = eskiEv;
+    return `
+    <div class="section-title" style="margin-top:26px;background:#eef0f4;color:var(--navy);padding:7px 10px;border-radius:6px">İlk Değerlendirme (Eski Metrikler) — yalnızca İK görür</div>
+    <p style="font-size:12px;color:var(--ink-soft);margin:6px 0 4px">Bu kişinin önceki dönem eski metriklerle doldurulmuş değerlendirmesidir; arşiv amaçlı gösterilir. ${e.updatedAt?.toDate ? "(" + e.updatedAt.toDate().toLocaleDateString("tr-TR") + ")" : ""}</p>
+    ${ESKI_POTANSIYEL_FIELDS.some(([k]) => e.potansiyel?.[k] != null) ? `<div class="section-title">İlk Değ. · Potansiyel Yetkinlikleri</div>
+      ${ESKI_POTANSIYEL_FIELDS.map(([k, l]) => e.potansiyel?.[k] != null ? rowHtml(l, scoreLabelText(e.potansiyel[k])) : "").join("")}` : ""}
+    ${e.teknikHakimiyet ? `<div class="section-title">İlk Değ. · Teknik Hakimiyet</div>
+      ${ESKI_TEKNIK_FIELDS.map(([k, l]) => rowHtml(l, scoreLabelText(e.teknikHakimiyet?.[k]))).join("")}` : ""}
+    ${e.ekKriterler ? `<div class="section-title">İlk Değ. · Ek Kriterler</div>
+      ${ESKI_EK_KRITERLER.map(([k, l]) => e.ekKriterler?.[k] ? rowHtml(l, e.ekKriterler[k]) : "").join("")}` : ""}
+    ${(e.egitimOnerileri && e.egitimOnerileri.length) ? `<div class="comp-row"><div class="q">İlk Değ. · Önerilen Eğitimler</div><div style="font-size:13px;color:var(--ink)">${e.egitimOnerileri.map((t) => `<span class="tag">${t}</span>`).join(" ")}</div></div>` : ""}
+    ${e.teknikHakimiyetOrt != null ? rowHtml("İlk Değ. · Teknik Hakimiyet Ort.", (e.teknikHakimiyetOrt ?? "—") + " / 5") : ""}
+    ${e.gerekce ? `<div class="comp-row"><div class="q">İlk Değ. · Gerekçe</div><div style="font-size:13px;color:var(--ink);white-space:pre-wrap">${e.gerekce}</div></div>` : ""}`;
   }
 
   overlay.innerHTML = `
