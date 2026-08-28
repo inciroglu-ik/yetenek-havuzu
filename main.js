@@ -307,6 +307,7 @@ function evalArsivMi(ev) {
 function rebuildEvalMap() {
   evaluationsMap = {};
   arsivMap = {};
+  const admin = currentProfile && currentProfile.isAdmin;
   const nameToId = {};
   employeesCache.forEach((e) => { if (e.adSoyad) nameToId[nameKey(e.adSoyad)] = e.id; });
   Object.values(allEvalsMap).forEach((ev) => {
@@ -315,7 +316,8 @@ function rebuildEvalMap() {
     if (evalArsivMi(ev)) {
       const c = arsivMap[key];
       if (!c || evalDahaYeni(ev, c)) arsivMap[key] = ev;
-      return; // arşiv güncel havuza girmez
+      if (!admin) return; // MÜDÜR: arşivi görmez (boş sayfa, sıfırdan doldurur)
+      // ADMIN: arşiv de güncel havuza girer (görebilir + filtreleyebilir)
     }
     const cur = evaluationsMap[key];
     if (!cur || evalDahaYeni(ev, cur)) evaluationsMap[key] = ev;
@@ -1089,7 +1091,9 @@ function scoreLabelText(v) {
 
 function openAdminDetailDrawer(emp) {
   const ev = evaluationsMap[emp.id];
-  const eskiEv = currentProfile.isAdmin ? arsivMap[emp.id] : null;
+  // İlk Değerlendirme sadece admin'e ve yalnızca AYRI bir taze kayıt varken gösterilir
+  // (arşiv-only kişilerde ana bölümler zaten arşivi gösterdiği için tekrar etmez).
+  const eskiEv = (currentProfile.isAdmin && arsivMap[emp.id] && arsivMap[emp.id] !== ev) ? arsivMap[emp.id] : null;
 
   const overlay = document.createElement("div");
   overlay.className = "overlay";
