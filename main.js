@@ -1903,6 +1903,9 @@ function openManagePanel() {
           <p style="font-size:13px;color:var(--ink);margin-top:14px">Adım 2 — Giriş hesaplarını hazırlar (<b>${typeof HESAPLAR !== "undefined" ? HESAPLAR.length : 0}</b> müdür/direktör).</p>
           <button class="btn btn-ghost btn-sm" id="hesapAcBtn">Adım 2 — Giriş Hesaplarını Hazırla</button>
           <div id="hesapAcMsg" style="font-size:12.5px;margin-top:8px;white-space:pre-line"></div>
+          <p style="font-size:13px;color:var(--ink);margin-top:14px">Adım 3 — Excel'de (YETENEK HAVUZU.xlsx) dolu olan <b>${typeof EVAL_IMPORT !== "undefined" ? EVAL_IMPORT.length : 0}</b> değerlendirmeyi yeni metriklerle canlı sisteme aktarır. İsimle güncel roster'a eşleşir.</p>
+          <button class="btn btn-ghost btn-sm" id="importYeniBtn">Adım 3 — Excel Değerlendirmelerini Aktar</button>
+          <div id="importYeniMsg" style="font-size:12.5px;margin-top:8px;white-space:pre-line"></div>
         </div>
 
         <div class="admin-panel">
@@ -2030,6 +2033,51 @@ function openManagePanel() {
     msg.style.color = hata ? "var(--warn)" : "var(--good)";
     msg.textContent = `✓ Tamamlandı. Yeni açılan: ${acildi}, zaten mevcut: ${vardi}${hata ? ", hata: " + hata : ""}.\nHerkesin kullanıcı adı ad.soyad, şifresi ${VARSAYILAN_SIFRE}.`;
     hesapAcBtn.disabled = false; hesapAcBtn.textContent = "Adım 2 — Giriş Hesaplarını Hazırla";
+  };
+
+  // ★ Adım 3 — Excel'deki dolu değerlendirmeleri yeni metriklerle içe aktar
+  const importYeniBtn = el("#importYeniBtn");
+  if (importYeniBtn) importYeniBtn.onclick = async () => {
+    const msg = el("#importYeniMsg");
+    if (typeof EVAL_IMPORT === "undefined") { msg.style.color = "var(--bad)"; msg.textContent = "import-data.js yüklenemedi."; return; }
+    if (!confirm(`${EVAL_IMPORT.length} değerlendirme canlı sisteme aktarılacak. İsimle güncel roster'a eşleşenlerin ${DEF_AKTIF} kaydı oluşturulur/güncellenir. Devam?`)) return;
+    importYeniBtn.disabled = true; importYeniBtn.textContent = "Aktarılıyor…"; msg.style.color = "var(--ink-soft)";
+    try {
+      const nameToEmp = {};
+      employeesCache.forEach((e) => { if (e.adSoyad) nameToEmp[nameKey(e.adSoyad)] = e; });
+      let ok = 0, bulunamadi = 0; const eksikler = [];
+      const ops = [];
+      EVAL_IMPORT.forEach((row) => {
+        const emp = nameToEmp[nameKey(row.adSoyad)];
+        if (!emp) { bulunamadi++; if (eksikler.length < 12) eksikler.push(row.adSoyad); return; }
+        const d = {
+          potansiyel: row.potansiyel || {}, ogrenmeCevikligi: row.ogrenmeCevikligi || {}, performans: row.performans || {},
+          liderlikPotansiyeli: row.liderlikPotansiyeli || "", yetenekHavuzuAlinmali: row.yetenekHavuzuAlinmali || "",
+          hazirOlmaSuresi: row.hazirOlmaSuresi || "", yedekPozisyonlar: row.yedekPozisyonlar || "", ayrilmaRiski: row.ayrilmaRiski || "",
+          gelisimAlanlari: row.gelisimAlanlari || "", fonksiyonelGecisUygun: row.fonksiyonelGecisUygun || "", fonksiyonelGecisDept: row.fonksiyonelGecisDept || "", gerekce: ""
+        };
+        const der = computeDerived(d);
+        const payload = {
+          employeeId: emp.id, donem: aktifDonem, adSoyad: emp.adSoyad,
+          departman: emp.departman || "", bolum: emp.bolum || "", unvan: emp.mevcutUnvan || "", muduluk: emp.muduluk || null,
+          ...d, ...der, sistemGerekcesi: sistemGerekce({ ...d, ...der, adSoyad: emp.adSoyad }),
+          status: isComplete(d) ? "tamamlandi" : "taslak",
+          submittedByUid: currentUid, submittedByName: "Excel'den İçe Aktarıldı", updatedAt: serverTimestamp()
+        };
+        ops.push((b) => b.set(doc(db, "evaluations", `${aktifDonem}::${emp.id}`), payload, { merge: true }));
+        ok++;
+      });
+      for (let i = 0; i < ops.length; i += 400) {
+        const b = writeBatch(db);
+        ops.slice(i, i + 400).forEach((fn) => fn(b));
+        await b.commit();
+      }
+      msg.style.color = "var(--good)";
+      msg.textContent = `✓ ${ok} değerlendirme aktarıldı.${bulunamadi ? ` ${bulunamadi} kişi roster'da bulunamadı: ${eksikler.join(", ")}${bulunamadi > eksikler.length ? "…" : ""}` : ""}`;
+    } catch (e) {
+      msg.style.color = "var(--bad)"; msg.textContent = "Hata: " + e.message;
+    }
+    importYeniBtn.disabled = false; importYeniBtn.textContent = "Adım 3 — Excel Değerlendirmelerini Aktar";
   };
 
   el("#seedBtn").onclick = async () => {
