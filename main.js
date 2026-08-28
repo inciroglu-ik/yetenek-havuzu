@@ -121,6 +121,19 @@ const GRID9 = {
   "0-2": { baslik: "KİLİT PERFORMANS", renk: "#2b5797", aciklama: ["Tutarlı biçimde performans beklentilerini aşar.", "Mevcut pozisyonunda kalmayı ve gelişmeyi arzular.", "Potansiyeline ulaşmıştır; lider ve rol modeli olarak kabul edilir."] }
 };
 
+// 9-Grid konumuna göre gelişim/yönlendirme önerisi
+const YONLENDIRME = {
+  "2-2": "Kritik pozisyon yedeği olarak konumlandırılmalı; hızlandırılmış liderlik gelişim programına ve stratejik projelere dahil edilmelidir.",
+  "2-1": "Artan sorumluluk ve karmaşıklıkta görevlerle, mentorluk desteğiyle bir sonraki pozisyona hazırlanmalıdır.",
+  "2-0": "Rolünde henüz yeni olduğundan yakın takip ve oryantasyonla desteklenmeli, performansını göstermesi için makul süre tanınmalıdır.",
+  "1-2": "Güçlü performansı ödüllendirilmeli; yatay/dikey gelişim fırsatları ve liderlik deneyimleriyle potansiyeli açığa çıkarılmalıdır.",
+  "1-1": "Hedefli eğitim ve geri bildirimle güçlendirilmeli; potansiyel sinyalleri düzenli gözlemlenmelidir.",
+  "1-0": "Birebir koçluk ve net bir gelişim planıyla desteklenmeli, kısa vadeli hedeflerle ilerlemesi izlenmelidir.",
+  "0-2": "Uzmanlığı kritik olduğundan mevcut rolünde elde tutulmalı ve derinliği ödüllendirilmelidir; yükseltme isteği düşükse zorlanmamalıdır.",
+  "0-1": "İstikrarı korunmalı; motivasyonu ve bağlılığı desteklenerek mevcut katkısı sürdürülmelidir.",
+  "0-0": "Performans iyileştirme planına alınmalı; beklentiler netleştirilip yakından izlenmeli, gerekirse rol uyumu değerlendirilmelidir."
+};
+
 // Düşük/Orta/Yüksek -> 1/2/3
 function doyNum(v) { return v === "Düşük" ? 1 : v === "Orta" ? 2 : v === "Yüksek" ? 3 : null; }
 // PERFORMANS bloğu ortalaması (1–3); negatif maddede yüksek = olumsuz (ters çevrilir)
@@ -169,12 +182,16 @@ function sistemGerekce(ev) {
   const perfYuksek = PERFORMANS_FIELDS.filter(([k, , neg]) => { const v = ev.performans && ev.performans[k]; return neg ? v === "Düşük" : v === "Yüksek"; }).map(([, l]) => l);
   if (perfYuksek.length) guclu.push("performansta öne çıkanlar: " + perfYuksek.slice(0, 3).join(", "));
   if (ev.liderlikPotansiyeli === "Var") guclu.push("liderlik potansiyeli mevcut");
-  const s1 = `${ad}, liderlik potansiyeli ekseninde ${potT}, performans ekseninde ${perfT} seviyededir${cell ? ` (${cell.baslik})` : ""}.`;
+  // gelişim alanları (düşük/orta performans maddeleri)
+  const zayif = PERFORMANS_FIELDS.filter(([k, , neg]) => { const v = ev.performans && ev.performans[k]; return neg ? v === "Yüksek" : v === "Düşük"; }).map(([, l]) => l);
+  const s1 = `${ad}, liderlik potansiyeli ekseninde ${potT}, performans ekseninde ${perfT} seviyededir${cell ? ` — 9-Grid konumu: ${cell.baslik}` : ""}.`;
   const s2 = guclu.length ? `Öne çıkan yönleri: ${guclu.join("; ")}.` : "Değerlendirme verisi sınırlı olduğundan güçlü yön tespiti kısıtlı.";
-  const s3 = sistemOnerisi(ev) === "Evet"
-    ? "Bu profil, gelişim ve kritik pozisyon yedeklemesi açısından yetenek havuzuna dahil edilmeye uygundur."
-    : "Bu profil şu an havuz kriterlerini tam karşılamıyor; hedefli gelişim sonrası yeniden değerlendirilmesi önerilir.";
-  return `${s1} ${s2} ${s3}`;
+  const yon = pos ? YONLENDIRME[pos.pot + "-" + pos.perf] : "";
+  const s3 = `Öneri: ${yon}${zayif.length ? ` Gelişime açık alanlar: ${zayif.slice(0, 3).join(", ")}.` : ""}`;
+  const s4 = sistemOnerisi(ev) === "Evet"
+    ? "Sonuç olarak bu profil, gelişim ve kritik pozisyon yedeklemesi açısından yetenek havuzuna dahil edilmelidir."
+    : "Sonuç olarak bu profil şu an havuz kriterlerini tam karşılamamaktadır; hedefli gelişim sonrası yeniden değerlendirilmelidir.";
+  return `${s1} ${s2} ${s3} ${s4}`;
 }
 
 function computeDerived(d) {
@@ -817,7 +834,6 @@ function openEvalDrawer(emp) {
     const ev = { ...d, ...der };
     const pos = gridPos(ev);
     const oneri = sistemOnerisi(ev);
-    const gk = pos ? sistemGerekce(ev) : "";
     return `
     <div class="summary-box">
       <div class="row"><span>Ortalama Potansiyel</span><b>${der.ortalamaPotansiyel} / 5</b></div>
@@ -825,7 +841,17 @@ function openEvalDrawer(emp) {
       <div class="row"><span>Performans Sınıfı</span><b>${der.performansSinifi}</b></div>
       ${pos ? `<div class="row"><span>9-Grid Konumu</span><b>${GRID9[pos.pot + "-" + pos.perf].baslik}</b></div>` : ""}
       ${oneri ? `<div class="verdict ${oneri === "Evet" ? "ok" : "dev"}">Sistem Önerisi — Yetenek Havuzuna: ${oneri.toLocaleUpperCase("tr")}</div>` : ""}
-      ${gk ? `<div style="font-size:12.5px;color:var(--ink);line-height:1.5;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Sistem Gerekçesi (otomatik):</b> ${gk}</div>` : ""}
+    </div>`;
+  }
+
+  function sistemKutuHtml() {
+    const der = computeDerived(d);
+    const ev = { ...d, ...der, adSoyad: emp.adSoyad };
+    const gk = gridPos(ev) ? sistemGerekce(ev) : "";
+    if (!gk) return `<div class="field"><div style="background:#f3f4f7;border:1px dashed var(--line);border-radius:8px;padding:12px 14px;font-size:12.5px;color:var(--ink-soft)">Metrikleri (Potansiyel, Performans, Öğrenme Çevikliği) doldurdukça sistem burada otomatik bir <b>öneri ve gerekçe</b> oluşturacaktır.</div></div>`;
+    return `<div class="field">
+      <label style="color:var(--brass)">Sistem Önerisi ve Gerekçesi (otomatik oluşturulur)</label>
+      <div style="background:#faf8f3;border:1px solid var(--brass);border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.55;color:var(--ink)">${gk}</div>
     </div>`;
   }
 
@@ -894,9 +920,10 @@ function openEvalDrawer(emp) {
         <input type="text" id="fonksiyonelGecisDept" value="${d.fonksiyonelGecisDept || ""}" placeholder="Örn: Yedek Parça">
       </div>
     </div>
+    ${sistemKutuHtml()}
     <div class="field">
       <label>Müdür Görüşü / Gerekçe (Vaka · Çıktı · Reaksiyon — opsiyonel)</label>
-      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:5px">Sistem, yukarıdaki özet kutusunda otomatik bir gerekçe üretir. Buraya <b>kendi görüşünüzü</b> ekleyebilirsiniz: hangi olayda bu yetkinliği sergiledi? Hangi iş sonucuna katkı sağladı?</div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:5px">Yukarıdaki öneriyi sistem otomatik yazar. Buraya <b>kendi görüşünüzü</b> ekleyin: hangi olayda bu yetkinliği sergiledi? Hangi iş sonucuna katkı sağladı?</div>
       <textarea id="gerekce" rows="4" placeholder="Kendi değerlendirmenizi ve somut örneği buraya yazın…">${d.gerekce || ""}</textarea>
     </div>`;
   }
