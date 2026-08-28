@@ -60,6 +60,76 @@ const TEKNIK_FIELDS = [
   ["kurumsalDeger", "Kurumsal Değerlere Uyum ve Temsil", "Kurum kültürü ve profesyonel standartları her ortamda yansıtma."]
 ];
 
+// Kıdemi bu değerin altında (yıl) olanlar değerlendirme dışıdır (6 ay = 0.5)
+const KIDEM_ESIK = 0.5;
+
+// EK DEĞERLENDİRME KRİTERLERİ (YETENEK HAVUZU.xlsx · Y–AH sütunları) — Düşük / Orta / Yüksek
+// eksen: "perf" performans ekseni, "pot" potansiyel/liderlik ekseni; negatif: yüksek = olumsuz
+const EK_KRITERLER = [
+  ["rolZorlukBasaCikma", "Mevcut Rolünde Zorluklarla Başa Çıkma Becerisi Güçlü Mü?", "perf", false],
+  ["davranisIstikrar", "Davranışlarında İstikrarlı Mı?", "perf", false],
+  ["stresKapaliTutum", "Zorlu Durumlar ve Stres Altında Kapalı Bir Tutum Sergiliyor Mu?", "perf", true],
+  ["meslekiBilgiBeceri", "Gerekli Mesleki Bilgi ve Beceriye Sahip Mi?", "perf", false],
+  ["yeterliDeneyim", "Yeterli Deneyime Sahip Mi?", "perf", false],
+  ["isbirligiEgilim", "İş Birliği Yapma Eğilimi Var Mı?", "pot", false],
+  ["dogalLiderlik", "Doğal Liderlik Özelliklerine Sahip Mi? Liderlik ile Motive Oluyor Mu?", "pot", false],
+  ["inisiyatifAlternatif", "İnisiyatif Alma ve Alternatif Üretme Becerisi Var Mı?", "pot", false],
+  ["deneyimdenOgrenme", "Deneyimlerden Ders Çıkarıp Yeni Güçlüklerde Faydalanıyor Mu?", "pot", false],
+  ["sonucaUlasmaKararli", "Sonuca Ulaşma Konusunda Kararlı Tutumlar Sergiliyor Mu?", "perf", false]
+];
+const EK_OPTS = [{ v: "Düşük", l: "Düşük" }, { v: "Orta", l: "Orta" }, { v: "Yüksek", l: "Yüksek" }];
+
+function kidemDisi(emp) {
+  return emp && typeof emp.kurumKidemiYil === "number" && emp.kurumKidemiYil < KIDEM_ESIK;
+}
+
+// ---------------------------------------------------------------
+// 9-GRID (Performans × Liderlik Potansiyeli) — İnsanlar Üzerine Değerlendirme
+// pot: 0 Duran · 1 Gelişen · 2 Hızlanan   |   perf: 0 Düşük · 1 Normal · 2 Yüksek
+// ---------------------------------------------------------------
+const POT_ETIKET = ["Duran", "Gelişen", "Hızlanan"];
+const PERF_ETIKET = ["Düşük Performans", "Normal Performans", "Yüksek Performans"];
+const GRID9 = {
+  "2-0": { baslik: "ROLÜ YENİ ÜSTLENEN", renk: "#1f7a8c", aciklama: ["Potansiyeline bağlı olarak yeni işe alınmış veya terfi ettirilmiştir; gelecekte mevcut pozisyonun ötesinde gelişmesi beklenir.", "Mevcut pozisyonunda henüz kısa süredir bulunmaktadır.", "Sonuç/performans/potansiyel ortaya koyması için daha fazla zamana ihtiyacı vardır."] },
+  "2-1": { baslik: "BÜYÜYEN ÇALIŞAN", renk: "#3d7a52", aciklama: ["Performans gereklerini tutarlı biçimde yerine getirir ve arada sırada beklentileri aşar.", "Mevcut pozisyonunun ötesinde liderlik becerileri, tutum ve perspektif sergileyebilir.", "Artan karmaşıklıkta rolleri üstlenecek kapasite ve arzu gösterir; bir sonraki pozisyona taşınabilecek potansiyeli vardır."] },
+  "2-2": { baslik: "YÜKSEK POTANSİYEL", renk: "#2e9e5b", aciklama: ["Tutarlı biçimde performans beklentilerini aşar.", "Mevcut pozisyonunun ötesinde liderlik becerileri, tutum ve perspektif sergiler.", "Artan karmaşıklıkta rolleri üstlenecek kapasite ve arzu gösterir; uzun vadeli esnekliğe sahiptir."] },
+  "1-0": { baslik: "GELİŞİM", renk: "#d4a017", aciklama: ["Mevcut pozisyonundaki performans ve liderlik beklentilerinin bazılarını yerine getirir.", "Daha geniş kapsamlı/karmaşık bir pozisyonda performans gösterebileceğinin işaretleri vardır.", "Koçluk ve gelişim desteği gereklidir."] },
+  "1-1": { baslik: "TEMEL ÇALIŞAN", renk: "#2d6cb5", aciklama: ["Performans gereklerini tutarlı biçimde yerine getirir ve arada sırada beklentileri aşar.", "Zamanla daha zorlu/karmaşık bir pozisyonda performans gösterecek kapasiteye sahip olabilir.", "Lider ve rol modeli olarak kabul edilir."] },
+  "1-2": { baslik: "YÜKSEK ETKİLİ PERFORMANS", renk: "#3d7a52", aciklama: ["Tutarlı biçimde performans beklentilerini aşar.", "Daha geniş kapsamlı/karmaşık bir pozisyonda da performans gösterebilir.", "Lider ve rol modeli; mevcut pozisyonunun ötesinde büyümeye adaydır."] },
+  "0-0": { baslik: "DÜŞÜK PERFORMANS", renk: "#c0392b", aciklama: ["Performans gereklerini yerine getirememektedir.", "Zayıf bir potansiyel sergiler ve mevcut pozisyonunda gelişim istekliliği düşüktür."] },
+  "0-1": { baslik: "SAĞLAM PERFORMANS", renk: "#2d6cb5", aciklama: ["Performans gereklerini tutarlı biçimde yerine getirir ve arada sırada beklentileri aşar.", "Mevcut pozisyonunda kalmayı ve gelişmeyi arzular.", "Potansiyeline ulaşmıştır veya yeni bir pozisyona geçmeye istekli değildir."] },
+  "0-2": { baslik: "KİLİT PERFORMANS", renk: "#2b5797", aciklama: ["Tutarlı biçimde performans beklentilerini aşar.", "Mevcut pozisyonunda kalmayı ve gelişmeyi arzular.", "Potansiyeline ulaşmıştır; lider ve rol modeli olarak kabul edilir."] }
+};
+
+function ekVal(v, negatif) {
+  const m = { "Düşük": 25, "Orta": 60, "Yüksek": 95 };
+  const x = m[v];
+  if (x === undefined) return null;
+  return negatif ? (120 - x) : x;
+}
+function potansiyelSkoru(ev) {
+  const parts = [];
+  if (ev.ortalamaPotansiyel != null) parts.push(ev.ortalamaPotansiyel / 5 * 100);
+  if (ev.ortalamaOgrenmeCevikligi != null) parts.push(ev.ortalamaOgrenmeCevikligi * 100);
+  EK_KRITERLER.filter((k) => k[2] === "pot").forEach(([key, , , neg]) => { const x = ekVal(ev.ekKriterler && ev.ekKriterler[key], neg); if (x != null) parts.push(x); });
+  if (ev.liderlikPotansiyeli === "Var") parts.push(100); else if (ev.liderlikPotansiyeli === "Yok") parts.push(30);
+  return parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : null;
+}
+function performansSkoru(ev) {
+  const parts = [];
+  if (ev.teknikHakimiyetOrt != null) parts.push(ev.teknikHakimiyetOrt / 5 * 100);
+  EK_KRITERLER.filter((k) => k[2] === "perf").forEach(([key, , , neg]) => { const x = ekVal(ev.ekKriterler && ev.ekKriterler[key], neg); if (x != null) parts.push(x); });
+  return parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : null;
+}
+function band100(x) { if (x == null) return null; if (x >= 75) return 2; if (x >= 50) return 1; return 0; }
+function gridPos(ev) {
+  if (!ev) return null;
+  const p = band100(potansiyelSkoru(ev));
+  const q = band100(performansSkoru(ev));
+  if (p == null || q == null) return null;
+  return { pot: p, perf: q };
+}
+
 function computeDerived(d) {
   const pVals = POTANSIYEL_FIELDS.map(([k]) => d.potansiyel?.[k]).filter((v) => v);
   const ortalamaPotansiyel = pVals.length ? pVals.reduce((a, b) => a + b, 0) / POTANSIYEL_FIELDS.length : 0;
@@ -81,7 +151,8 @@ function isComplete(d) {
   const pOk = POTANSIYEL_FIELDS.every(([k]) => d.potansiyel?.[k]);
   const cOk = CEVIKLIK_FIELDS.every(([k]) => d.ogrenmeCevikligi?.[k] !== undefined && d.ogrenmeCevikligi?.[k] !== null);
   const tOk = TEKNIK_FIELDS.every(([k]) => d.teknikHakimiyet?.[k]);
-  return pOk && cOk && tOk && d.liderlikPotansiyeli && d.hazirOlmaSuresi && d.ayrilmaRiski && d.gerekce && d.gerekce.trim().length > 0;
+  const ekOk = EK_KRITERLER.every(([k]) => d.ekKriterler?.[k]);
+  return pOk && cOk && tOk && ekOk && d.liderlikPotansiyeli && d.hazirOlmaSuresi && d.ayrilmaRiski && d.gerekce && d.gerekce.trim().length > 0;
 }
 
 function formatKidem(kurumKidemiYil) {
@@ -138,16 +209,32 @@ let donemList = DEF_DONEMLER;   // seçilebilir dönemler
 let viewDonem = DEF_AKTIF;      // ekranda görüntülenen dönem
 const DONEM_AYAR_ID = "_ayar_donem"; // "managers" koleksiyonunda dönem ayar dokümanı (uid ile çakışmaz)
 
-// Bir değerlendirme dokümanının ait olduğu dönem (eski kayıtlarda alan yoksa ESKİ sayılır)
-function evalDonem(ev) { return ev.donem || DEF_ESKI; }
+// Türkçe-duyarsız isim anahtarı (eski değerlendirmeleri güncel roster'a isimle eşlemek için)
+function trFold(s) {
+  return (s || "").toString()
+    .replace(/İ/g, "I").replace(/ı/g, "i")
+    .toLocaleUpperCase("tr")
+    .replace(/Ç/g, "C").replace(/Ğ/g, "G").replace(/Ö/g, "O").replace(/Ş/g, "S").replace(/Ü/g, "U").replace(/İ/g, "I")
+    .replace(/\s+/g, " ").trim();
+}
+function nameKey(s) { return trFold(s); }
+function evalDahaYeni(a, b) {
+  const ta = a.updatedAt && a.updatedAt.toMillis ? a.updatedAt.toMillis() : 0;
+  const tb = b.updatedAt && b.updatedAt.toMillis ? b.updatedAt.toMillis() : 0;
+  if (ta !== tb) return ta > tb;
+  return !!a.donem && !b.donem;
+}
 
-// Seçili döneme (viewDonem) göre evaluationsMap'i yeniden kur (employeeId -> ev)
+// Tüm değerlendirmeleri (eski + yeni) tek yıl havuzunda birleştir; güncel roster'a İSİMLE eşle.
 function rebuildEvalMap() {
   evaluationsMap = {};
+  const nameToId = {};
+  employeesCache.forEach((e) => { if (e.adSoyad) nameToId[nameKey(e.adSoyad)] = e.id; });
   Object.values(allEvalsMap).forEach((ev) => {
-    if (evalDonem(ev) !== viewDonem) return;
-    const key = ev.employeeId || ev.id;
-    evaluationsMap[key] = ev;
+    const nk = nameKey(ev.adSoyad || "");
+    const key = nameToId[nk] || ev.employeeId || ev.id;
+    const cur = evaluationsMap[key];
+    if (!cur || evalDahaYeni(ev, cur)) evaluationsMap[key] = ev;
   });
 }
 
@@ -480,9 +567,11 @@ function kapsamListeleri() {
 
 function renderManager() {
   const { duzenlenebilir, salt, aktif } = kapsamListeleri();
-  const total = duzenlenebilir.length;
-  const done = duzenlenebilir.filter((e) => evaluationsMap[e.id]?.status === "tamamlandi").length;
-  const draft = duzenlenebilir.filter((e) => evaluationsMap[e.id]?.status === "taslak").length;
+  const degerlendirilebilir = duzenlenebilir.filter((e) => !kidemDisi(e));
+  const disiSayi = duzenlenebilir.length - degerlendirilebilir.length;
+  const total = degerlendirilebilir.length;
+  const done = degerlendirilebilir.filter((e) => evaluationsMap[e.id]?.status === "tamamlandi").length;
+  const draft = degerlendirilebilir.filter((e) => evaluationsMap[e.id]?.status === "taslak").length;
   const pending = total - done - draft;
   const roles = profilRolleri(currentProfile);
   const direktorMu = roles.includes("direktor");
@@ -512,10 +601,11 @@ function renderManager() {
         </div>
         ${banner}
         ${aktif ? `<div class="stat-row">
-          <div class="stat-card"><div class="n">${total}</div><div class="l">Toplam</div></div>
+          <div class="stat-card"><div class="n">${total}</div><div class="l">Değerlendirilecek</div></div>
           <div class="stat-card"><div class="n">${done}</div><div class="l">Tamamlandı</div></div>
           <div class="stat-card"><div class="n">${draft}</div><div class="l">Taslak</div></div>
           <div class="stat-card"><div class="n">${pending}</div><div class="l">Bekliyor</div></div>
+          ${disiSayi ? `<div class="stat-card"><div class="n">${disiSayi}</div><div class="l">Kıdem &lt; 6 Ay (Dışı)</div></div>` : ""}
         </div>` : ""}
         <div class="toolbar">
           <input type="text" id="searchBox" placeholder="İsimle ara…" style="min-width:220px">
@@ -538,9 +628,23 @@ function renderManager() {
   wireTopbar();
 
   function empCardHtml(e, saltOkunur) {
+    const disi = kidemDisi(e) && !saltOkunur;
     const ev = evaluationsMap[e.id];
     const st = ev?.status || "bekliyor";
     const stLabel = st === "tamamlandi" ? "Tamamlandı" : st === "taslak" ? "Taslak" : (saltOkunur ? "Kayıt yok" : "Bekliyor");
+    if (disi) {
+      return `
+      <div class="emp-card" id="card-${e.id}" style="opacity:.72;cursor:not-allowed">
+        <div style="display:flex;align-items:center;gap:12px;">
+          ${avatarHtml(e.adSoyad, 36)}
+          <div class="main">
+            <b>${e.adSoyad}</b>
+            <div class="meta">${e.mevcutUnvan || ""} · ${e.departman || ""} / ${e.bolum || ""}</div>
+          </div>
+        </div>
+        <span class="status-badge" style="background:#eef0f4;color:#6b7280">Kıdem &lt; 6 Ay · Değerlendirme Dışı</span>
+      </div>`;
+    }
     return `
     <div class="emp-card" id="card-${e.id}" style="cursor:pointer">
       <div style="display:flex;align-items:center;gap:12px;">
@@ -568,7 +672,12 @@ function renderManager() {
       : `<div class="empty-state">${aktif ? "Aramanızla eşleşen personel bulunamadı." : "Bu dönemde kayıt bulunamadı."}</div>`;
     mainList.forEach((e) => {
       const node = document.getElementById("card-" + e.id);
-      if (node) node.addEventListener("click", () => aktif ? openEvalDrawer(e) : openAdminDetailDrawer(e));
+      if (!node) return;
+      if (aktif && kidemDisi(e)) {
+        node.addEventListener("click", () => toast("Bu personel kıdemi 6 aydan az olduğu için değerlendirme dışıdır."));
+      } else {
+        node.addEventListener("click", () => aktif ? openEvalDrawer(e) : openAdminDetailDrawer(e));
+      }
     });
 
     const vl = document.getElementById("viewList");
@@ -596,6 +705,7 @@ function openEvalDrawer(emp) {
     potansiyel: { ...(existing.potansiyel || {}) },
     ogrenmeCevikligi: { ...(existing.ogrenmeCevikligi || {}) },
     teknikHakimiyet: { ...(existing.teknikHakimiyet || {}) },
+    ekKriterler: { ...(existing.ekKriterler || {}) },
     liderlikPotansiyeli: existing.liderlikPotansiyeli || "",
     yetenekHavuzuAlinmali: existing.yetenekHavuzuAlinmali || "",
     hazirOlmaSuresi: existing.hazirOlmaSuresi || "",
@@ -686,6 +796,9 @@ function openEvalDrawer(emp) {
     <div class="section-title">Teknik Hakimiyet (1–5)</div>
     ${TEKNIK_FIELDS.map(([k, l, ds]) => segHtml("teknikHakimiyet", k, l, ds, SCORE_LABELS.map((s) => ({ v: s.v, l: s.l })))).join("")}
 
+    <div class="section-title">Ek Değerlendirme Kriterleri (Düşük / Orta / Yüksek)</div>
+    ${EK_KRITERLER.map(([k, l]) => segHtml("ekKriterler", k, l, "", EK_OPTS)).join("")}
+
     ${summaryHtml()}
 
     <div class="section-title">Gelişim ve Planlama</div>
@@ -757,6 +870,7 @@ function openEvalDrawer(emp) {
     POTANSIYEL_FIELDS.forEach(([k]) => { if (!d.potansiyel[k]) mark(`.comp-row[data-fieldkey="potansiyel.${k}"]`); });
     CEVIKLIK_FIELDS.forEach(([k]) => { if (d.ogrenmeCevikligi[k] === undefined || d.ogrenmeCevikligi[k] === null) mark(`.comp-row[data-fieldkey="ogrenmeCevikligi.${k}"]`); });
     TEKNIK_FIELDS.forEach(([k]) => { if (!d.teknikHakimiyet[k]) mark(`.comp-row[data-fieldkey="teknikHakimiyet.${k}"]`); });
+    EK_KRITERLER.forEach(([k]) => { if (!d.ekKriterler[k]) mark(`.comp-row[data-fieldkey="ekKriterler.${k}"]`); });
     if (!d.liderlikPotansiyeli) mark('.comp-row[data-fieldkey="liderlikPotansiyeli"]');
     if (!d.hazirOlmaSuresi) mark("#hazirOlmaSuresi");
     if (!d.ayrilmaRiski) mark("#ayrilmaRiski");
@@ -887,6 +1001,7 @@ function openAdminDetailDrawer(emp) {
 
   function bodyHtml() {
     if (!ev) {
+      if (kidemDisi(emp)) return `<div class="empty-state">Bu personel <b>kıdemi 6 aydan az</b> olduğu için değerlendirme dışıdır; müdürüne metrikler doldurtulmaz.</div>`;
       return `<div class="empty-state">Bu personel için henüz bir değerlendirme girilmedi.</div>`;
     }
     return `
@@ -902,6 +1017,9 @@ function openAdminDetailDrawer(emp) {
 
     <div class="section-title">Teknik Hakimiyet</div>
     ${TEKNIK_FIELDS.map(([k, l]) => rowHtml(l, scoreLabelText(ev.teknikHakimiyet?.[k]))).join("")}
+
+    <div class="section-title">Ek Değerlendirme Kriterleri</div>
+    ${EK_KRITERLER.map(([k, l]) => rowHtml(l, ev.ekKriterler?.[k])).join("")}
 
     <div class="summary-box">
       <div class="row"><span>Ortalama Potansiyel</span><b>${ev.ortalamaPotansiyel ?? "—"} / 5</b></div>
@@ -1065,6 +1183,10 @@ async function exportSinglePersonExcel(emp, ev) {
       sectionRow("Teknik Hakimiyet");
       shade = false;
       TEKNIK_FIELDS.forEach(([k, l]) => dataRow(l, scoreLabelText(ev.teknikHakimiyet?.[k]), { shade: (shade = !shade) }));
+
+      sectionRow("Ek Değerlendirme Kriterleri");
+      shade = false;
+      EK_KRITERLER.forEach(([k, l]) => dataRow(l, ev.ekKriterler?.[k], { shade: (shade = !shade) }));
 
       sectionRow("Hesaplanan Sonuçlar");
       shade = false;
@@ -1274,10 +1396,10 @@ async function downloadExecutivePdf(ctx) {
     ctx.deptData.forEach((d, i) => tableRow([d.label, d.value], dW, { shade: i % 2 === 1 }));
     y += 6;
 
-    sectionTitle("9-Box Yetenek Matrisi (Potansiyel × Teknik Hakimiyet)");
-    const bW = [(W - 2 * M) * 0.34, (W - 2 * M) * 0.34, (W - 2 * M) * 0.32];
-    tableRow(["Potansiyel", "Teknik Hakimiyet", "Kişi Sayısı"], bW, { bold: true });
-    ctx.box9.forEach((c, i) => tableRow([BAND_LABELS[c.p], BAND_LABELS[c.t], c.list.length], bW, { shade: i % 2 === 1 }));
+    sectionTitle("9-Grid (Performans × Liderlik Potansiyeli)");
+    const bW = [(W - 2 * M) * 0.30, (W - 2 * M) * 0.24, (W - 2 * M) * 0.28, (W - 2 * M) * 0.18];
+    tableRow(["Grup", "Liderlik Pot.", "Performans", "Kişi"], bW, { bold: true });
+    ctx.box9.forEach((c, i) => tableRow([c.cell.baslik, POT_ETIKET[c.pot], PERF_ETIKET[c.perf], c.list.length], bW, { shade: i % 2 === 1 }));
     y += 6;
 
     sectionTitle("Kritik Risk — Havuzda ve Ayrılma Riski Yüksek");
@@ -1353,18 +1475,19 @@ function renderAdmin() {
     { label: "Yüksek Risk", value: riskCounts["Yüksek"], color: "var(--bad)" }
   ];
 
-  // --- 9-box: potential (rows, high→low) x teknik hakimiyet (cols, low→high) ---
+  // --- 9-GRID: Liderlik Potansiyeli (satır, yüksek→düşük) × Performans (sütun, düşük→yüksek) ---
+  const grid9 = {};
+  Object.keys(GRID9).forEach((k) => (grid9[k] = []));
+  let yerlesenSayi = 0;
+  roster.forEach((e) => {
+    const pos = gridPos(evaluationsMap[e.id]);
+    if (pos) { grid9[`${pos.pot}-${pos.perf}`].push(e); yerlesenSayi++; }
+  });
   const box9 = [];
-  for (let p = 2; p >= 0; p--) {
-    for (let t = 0; t <= 2; t++) {
-      const list = roster.filter((e) => {
-        const ev = evaluationsMap[e.id];
-        if (!ev || ev.ortalamaPotansiyel == null || ev.teknikHakimiyetOrt == null) return false;
-        return band(ev.ortalamaPotansiyel) === p && band(ev.teknikHakimiyetOrt) === t;
-      });
-      const tier = p + t;
-      const cls = tier >= 4 ? "good" : tier <= 1 ? "bad" : "warn";
-      box9.push({ p, t, list, cls });
+  for (let pot = 2; pot >= 0; pot--) {
+    for (let perf = 0; perf <= 2; perf++) {
+      const key = pot + "-" + perf;
+      box9.push({ pot, perf, key, list: grid9[key], cell: GRID9[key] });
     }
   }
 
@@ -1426,19 +1549,30 @@ function renderAdmin() {
       </div>
 
       <div class="box9-wrap">
-        <h3 style="margin:0 0 4px">9-Box Yetenek Matrisi</h3>
-        <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft)">Potansiyel × Teknik Hakimiyet (değerlendirmesi girilmiş ${box9.reduce((a, c) => a + c.list.length, 0)} personel dahildir). Bir hücreye tıklayarak kişileri görebilirsiniz.</p>
-        <div class="box9-body">
-          <div class="box9-yaxis">Potansiyel</div>
-          <div>
-            <div class="box9-grid" id="box9Grid">
-              ${box9.map((c, i) => `
-                <div class="box9-cell ${c.cls}" data-idx="${i}">
-                  <div class="n">${c.list.length}</div>
-                  <div class="l">Potansiyel: ${BAND_LABELS[c.p]}<br>Teknik: ${BAND_LABELS[c.t]}</div>
-                </div>`).join("")}
+        <h3 style="margin:0 0 4px">9-Grid · İnsanlar Üzerine Değerlendirme</h3>
+        <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft)">Değerlendirmesi tamamlanan <b>${yerlesenSayi}</b> personel, <b>Performans</b> (teknik hakimiyet + ek performans kriterleri) ve <b>Liderlik Potansiyeli</b> (potansiyel yetkinlikleri + öğrenme çevikliği + ek potansiyel kriterleri) puanlarına göre otomatik yerleştirilir. Her kutunun açıklaması, o gruba <i>neden</i> dahil olunduğunu anlatır — kılavuz niteliğindedir. Kutuya tıklayınca kişiler listelenir.</p>
+        <div style="display:flex;gap:10px;align-items:stretch">
+          <div style="writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;font-weight:700;color:var(--navy);font-size:12.5px;letter-spacing:.04em;padding:4px 0">LİDERLİK POTANSİYELİ →</div>
+          <div style="flex:1;overflow-x:auto">
+            <div style="display:grid;grid-template-columns:74px 1fr 1fr 1fr;gap:8px;min-width:760px" id="grid9">
+              ${[0, 3, 6].map((start) => {
+                const potBand = box9[start].pot;
+                return `<div style="display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--navy);font-size:12.5px;text-align:center">${POT_ETIKET[potBand]}</div>` +
+                  box9.slice(start, start + 3).map((c, j) => `
+                    <div class="g9cell" data-idx="${start + j}" style="cursor:pointer;background:${c.cell.renk};color:#fff;border-radius:8px;padding:10px 11px;min-height:132px;display:flex;flex-direction:column;gap:6px">
+                      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+                        <b style="font-size:12.5px;line-height:1.25">${c.cell.baslik}</b>
+                        <span style="flex:none;background:rgba(255,255,255,.22);border-radius:20px;padding:1px 9px;font-weight:700;font-size:12.5px">${c.list.length}</span>
+                      </div>
+                      <ul style="margin:0;padding-left:15px;font-size:10.5px;line-height:1.35;opacity:.94">${c.cell.aciklama.map((a) => `<li style="margin-bottom:2px">${a}</li>`).join("")}</ul>
+                      ${c.list.length ? `<div style="margin-top:auto;font-size:10.5px;font-weight:600;background:rgba(255,255,255,.16);border-radius:5px;padding:4px 6px">${c.list.slice(0, 5).map((e) => e.adSoyad).join(", ")}${c.list.length > 5 ? " +" + (c.list.length - 5) : ""}</div>` : ""}
+                    </div>`).join("");
+              }).join("")}
+              <div></div>
+              <div style="text-align:center;font-size:12px;font-weight:600;color:var(--ink-soft)">Düşük Performans</div>
+              <div style="text-align:center;font-size:12px;font-weight:600;color:var(--ink-soft)">Normal Performans</div>
+              <div style="text-align:center;font-size:12px;font-weight:600;color:var(--ink-soft)">Yüksek Performans</div>
             </div>
-            <div class="box9-xaxis"><span>Düşük</span><span>Orta</span><span>Yüksek</span></div>
           </div>
         </div>
       </div>
@@ -1519,10 +1653,10 @@ function renderAdmin() {
     roster.filter((e) => evaluationsMap[e.id]?.fonksiyonelGecisUygun === "Evet")
   ));
 
-  document.querySelectorAll("#box9Grid .box9-cell").forEach((cell) => {
+  document.querySelectorAll("#grid9 .g9cell").forEach((cell) => {
     cell.addEventListener("click", () => {
       const c = box9[Number(cell.dataset.idx)];
-      openStatListDrawer(`9-Box: Potansiyel ${BAND_LABELS[c.p]} / Teknik Hakimiyet ${BAND_LABELS[c.t]}`, c.list);
+      openStatListDrawer(`${c.cell.baslik} · ${POT_ETIKET[c.pot]} / ${PERF_ETIKET[c.perf]}`, c.list);
     });
   });
 
@@ -1624,15 +1758,19 @@ function renderAdmin() {
 }
 
 function exportCsv() {
-  const headers = ["Ad Soyad", "Departman", "Bölüm", "Unvan", "Müdür", "Kıdem", "Durum", "Ort. Potansiyel", "Öğr. Çeviklik %", "Teknik Hakimiyet", "Değerlendirme", "Yetenek Havuzuna Alınmalı", "Liderlik Potansiyeli", "Hazır Olma Süresi", "Ayrılma Riski", "Fonksiyonel Geçişe Uygun", "Fonksiyonel Geçiş Departman/Rol", "Yedekleyebileceği Pozisyon", "Gelişim Alanları", "Gerekçe"];
+  const headers = ["Ad Soyad", "Departman", "Bölüm", "Unvan", "Müdür", "Kıdem", "Durum", "9-Grid Grubu", "Liderlik Pot. (eksen)", "Performans (eksen)", "Ort. Potansiyel", "Öğr. Çeviklik %", "Teknik Hakimiyet", "Değerlendirme", "Yetenek Havuzuna Alınmalı", "Liderlik Potansiyeli", "Hazır Olma Süresi", "Ayrılma Riski", "Fonksiyonel Geçişe Uygun", "Fonksiyonel Geçiş Departman/Rol", "Yedekleyebileceği Pozisyon", "Gelişim Alanları", "Gerekçe", ...EK_KRITERLER.map(([, l]) => l)];
   const rows = adminRoster().map((e) => {
     const ev = evaluationsMap[e.id] || {};
+    const pos = gridPos(ev);
     return [
       e.adSoyad, e.departman, e.bolum, e.mevcutUnvan, e.muduluk || "", formatKidem(e.kurumKidemiYil),
-      ev.status || "bekliyor", ev.ortalamaPotansiyel ?? "", ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) : "",
+      kidemDisi(e) ? "Kıdem<6ay (dışı)" : (ev.status || "bekliyor"),
+      pos ? GRID9[pos.pot + "-" + pos.perf].baslik : "", pos ? POT_ETIKET[pos.pot] : "", pos ? PERF_ETIKET[pos.perf] : "",
+      ev.ortalamaPotansiyel ?? "", ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) : "",
       ev.teknikHakimiyetOrt ?? "", ev.potansiyelDegerlendirme || "", ev.yetenekHavuzuAlinmali || "", ev.liderlikPotansiyeli || "",
       ev.hazirOlmaSuresi || "", ev.ayrilmaRiski || "", ev.fonksiyonelGecisUygun || "", ev.fonksiyonelGecisDept || "",
-      ev.yedekPozisyonlar || "", ev.gelisimAlanlari || "", (ev.gerekce || "").replace(/\n/g, " ")
+      ev.yedekPozisyonlar || "", ev.gelisimAlanlari || "", (ev.gerekce || "").replace(/\n/g, " "),
+      ...EK_KRITERLER.map(([k]) => ev.ekKriterler?.[k] || "")
     ];
   });
   const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -1659,8 +1797,8 @@ function openManagePanel() {
       </div>
       <div class="drawer-body">
         <div class="admin-panel" style="border:1.5px solid var(--brass);background:var(--warn-bg)">
-          <div class="section-title" style="margin-top:0">★ Yeni Dönem Başlat (Ağustos 2026)</div>
-          <p style="font-size:13px;color:var(--ink)">Adım 1 — Dönemi kurar: mevcut değerlendirmeleri <b>${DEF_ESKI}</b> dönemine kilitler (herkes görür, kimse düzenleyemez), yeni listeyi (<b>${typeof ROSTER_2026 !== "undefined" ? ROSTER_2026.length : 0}</b> kişi) yükler, yetki tanımlarını yazar ve aktif dönemi <b>${DEF_AKTIF}</b> yapar.</p>
+          <div class="section-title" style="margin-top:0">★ ${DEF_AKTIF} Yıl Havuzunu Kur</div>
+          <p style="font-size:13px;color:var(--ink)">Adım 1 — Havuzu kurar: güncel çalışan listesini (<b>${typeof ROSTER_2026 !== "undefined" ? ROSTER_2026.length : 0}</b> kişi) yükler, mevcut (eski) değerlendirmeleri <b>${DEF_AKTIF}</b> yıl havuzuna dahil eder ve müdür/direktör yetkilerini yazar. Eski ve yeni değerlendirmeler tek yerde, yıl bazlı görünür.</p>
           <button class="btn btn-brass btn-sm" id="donemKurBtn">Adım 1 — Dönemi Kur</button>
           <div id="donemKurMsg" style="font-size:12.5px;margin-top:8px;white-space:pre-line"></div>
           <p style="font-size:13px;color:var(--ink);margin-top:14px">Adım 2 — Giriş hesaplarını hazırlar (<b>${typeof HESAPLAR !== "undefined" ? HESAPLAR.length : 0}</b> müdür/direktör).</p>
@@ -1717,7 +1855,7 @@ function openManagePanel() {
     if (typeof ROSTER_2026 === "undefined" || typeof HESAPLAR === "undefined") {
       msg.style.color = "var(--bad)"; msg.textContent = "donem-data.js yüklenemedi."; return;
     }
-    if (!confirm(`Yeni dönem kurulacak:\n• Mevcut değerlendirmeler "${DEF_ESKI}" olarak kilitlenecek\n• ${ROSTER_2026.length} kişilik yeni liste yüklenecek\n• Aktif dönem "${DEF_AKTIF}" olacak\n\nDevam edilsin mi?`)) return;
+    if (!confirm(`${DEF_AKTIF} yıl havuzu kurulacak:\n• ${ROSTER_2026.length} kişilik güncel liste yüklenecek\n• Mevcut (eski) değerlendirmeler ${DEF_AKTIF} havuzuna dahil edilecek\n• Müdür/direktör yetkileri yazılacak\n\nDevam edilsin mi?`)) return;
     donemKurBtn.disabled = true; donemKurBtn.textContent = "Kuruluyor…"; msg.style.color = "var(--ink-soft)";
     try {
       const commitChunks = async (ops) => {
@@ -1760,7 +1898,7 @@ function openManagePanel() {
       aktifDonem = DEF_AKTIF; donemList = DEF_DONEMLER; viewDonem = DEF_AKTIF;
 
       msg.style.color = "var(--good)";
-      msg.textContent = `✓ Dönem kuruldu. ${ROSTER_2026.length} personel yüklendi, eski değerlendirmeler "${DEF_ESKI}" olarak kilitlendi.\nŞimdi Adım 2 ile giriş hesaplarını hazırlayın.`;
+      msg.textContent = `✓ ${DEF_AKTIF} havuzu kuruldu. ${ROSTER_2026.length} personel yüklendi, eski değerlendirmeler ${DEF_AKTIF} havuzuna dahil edildi.\nŞimdi Adım 2 ile giriş hesaplarını hazırlayın.`;
     } catch (e) {
       msg.style.color = "var(--bad)"; msg.textContent = "Hata: " + e.message;
     }

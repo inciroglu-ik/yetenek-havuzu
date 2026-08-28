@@ -2,9 +2,9 @@
 // AGUSTOS 2026 DONEM VERISI - otomatik uretildi (yetenek_gen.ps1)
 // Kaynak: Calisan Listesi - Agu 2026 (13).xlsx
 // ============================================================
-const AKTIF_DONEM = "3. Çeyrek Sonu";
-const ESKI_DONEM = "2. Çeyrek Sonu";
-const DONEMLER = ["2. Çeyrek Sonu", "3. Çeyrek Sonu"];
+const AKTIF_DONEM = "2026";
+const ESKI_DONEM = "2026";
+const DONEMLER = ["2026"];
 const VARSAYILAN_SIFRE = "inciroglu01";
 const ROSTER_2026 = [
     {
