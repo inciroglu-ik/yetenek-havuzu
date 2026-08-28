@@ -110,15 +110,15 @@ function kidemDisi(emp) {
 const POT_ETIKET = ["Duran", "Gelişen", "Hızlanan"];
 const PERF_ETIKET = ["Düşük Performans", "Normal Performans", "Yüksek Performans"];
 const GRID9 = {
-  "2-0": { baslik: "ROLÜ YENİ ÜSTLENEN", renk: "#1f7a8c", aciklama: ["Potansiyeline bağlı olarak yeni işe alınmış veya terfi ettirilmiştir; gelecekte mevcut pozisyonun ötesinde gelişmesi beklenir.", "Mevcut pozisyonunda henüz kısa süredir bulunmaktadır.", "Sonuç/performans/potansiyel ortaya koyması için daha fazla zamana ihtiyacı vardır."] },
-  "2-1": { baslik: "BÜYÜYEN ÇALIŞAN", renk: "#3d7a52", aciklama: ["Performans gereklerini tutarlı biçimde yerine getirir ve arada sırada beklentileri aşar.", "Mevcut pozisyonunun ötesinde liderlik becerileri, tutum ve perspektif sergileyebilir.", "Artan karmaşıklıkta rolleri üstlenecek kapasite ve arzu gösterir; bir sonraki pozisyona taşınabilecek potansiyeli vardır."] },
-  "2-2": { baslik: "YÜKSEK POTANSİYEL", renk: "#2e9e5b", aciklama: ["Tutarlı biçimde performans beklentilerini aşar.", "Mevcut pozisyonunun ötesinde liderlik becerileri, tutum ve perspektif sergiler.", "Artan karmaşıklıkta rolleri üstlenecek kapasite ve arzu gösterir; uzun vadeli esnekliğe sahiptir."] },
-  "1-0": { baslik: "GELİŞİM", renk: "#d4a017", aciklama: ["Mevcut pozisyonundaki performans ve liderlik beklentilerinin bazılarını yerine getirir.", "Daha geniş kapsamlı/karmaşık bir pozisyonda performans gösterebileceğinin işaretleri vardır.", "Koçluk ve gelişim desteği gereklidir."] },
-  "1-1": { baslik: "TEMEL ÇALIŞAN", renk: "#2d6cb5", aciklama: ["Performans gereklerini tutarlı biçimde yerine getirir ve arada sırada beklentileri aşar.", "Zamanla daha zorlu/karmaşık bir pozisyonda performans gösterecek kapasiteye sahip olabilir.", "Lider ve rol modeli olarak kabul edilir."] },
-  "1-2": { baslik: "YÜKSEK ETKİLİ PERFORMANS", renk: "#3d7a52", aciklama: ["Tutarlı biçimde performans beklentilerini aşar.", "Daha geniş kapsamlı/karmaşık bir pozisyonda da performans gösterebilir.", "Lider ve rol modeli; mevcut pozisyonunun ötesinde büyümeye adaydır."] },
-  "0-0": { baslik: "DÜŞÜK PERFORMANS", renk: "#c0392b", aciklama: ["Performans gereklerini yerine getirememektedir.", "Zayıf bir potansiyel sergiler ve mevcut pozisyonunda gelişim istekliliği düşüktür."] },
-  "0-1": { baslik: "SAĞLAM PERFORMANS", renk: "#2d6cb5", aciklama: ["Performans gereklerini tutarlı biçimde yerine getirir ve arada sırada beklentileri aşar.", "Mevcut pozisyonunda kalmayı ve gelişmeyi arzular.", "Potansiyeline ulaşmıştır veya yeni bir pozisyona geçmeye istekli değildir."] },
-  "0-2": { baslik: "KİLİT PERFORMANS", renk: "#2b5797", aciklama: ["Tutarlı biçimde performans beklentilerini aşar.", "Mevcut pozisyonunda kalmayı ve gelişmeyi arzular.", "Potansiyeline ulaşmıştır; lider ve rol modeli olarak kabul edilir."] }
+  "2-0": { baslik: "ROLÜ YENİ ÜSTLENEN", renk: "#1f7a8c", aciklama: ["Potansiyellerine bağlı olarak yeni işe alınmış veya terfi ettirilmişlerdir ve gelecekte mevcut pozisyonun ötesinde daha da gelişmeleri beklenmektedir.", "Mevcut pozisyonunda uç yakın kısa süredir bulunmaktadırlar.", "Bu pozisyonda sonuç/performans/potansiyel ortaya koymaları için daha fazla zamana ihtiyaçları vardır."] },
+  "2-1": { baslik: "BÜYÜYEN ÇALIŞAN", renk: "#3d7a52", aciklama: ["Performans gereklerini tutarlı biçimde yerine getirir ve arada sırada beklentileri aşar.", "Mevcut pozisyonunun kapsamının ötesinde liderlik becerileri, tutum ve perspektif sergileyebilir.", "Giderek artan karmaşıklıkta rolleri üstlenecek kapasiteyi ve arzuyu ortaya koyar, bir sonraki pozisyonu taşıyabilecek potansiyeli mevcuttur."] },
+  "2-2": { baslik: "YÜKSEK POTANSİYEL", renk: "#2e9e5b", aciklama: ["Tutarlı biçimde performans beklentilerini aşar.", "Mevcut pozisyonunun kapsamının ötesinde liderlik becerileri, tutum ve perspektif sergiler.", "Giderek artan karmaşıklıkta rolleri üstlenecek kapasiteyi ve arzuyu ortaya koyar, bir sonraki pozisyonun ötesinde uzun vadeli esnekliğe sahiptir."] },
+  "1-0": { baslik: "GELİŞİM", renk: "#d4a017", aciklama: ["Mevcut pozisyonunda performans ve liderlik beklentilerinin hepsini değilse de bazılarını yerine getirmektedir.", "Daha geniş kapsamlı veya karmaşıklıktaki bir pozisyonda da performans gösterebileceğinin işaretleri vardır.", "Destek için koçluk/gelişim desteği gereklidir.", "Mevcut pozisyonunda gelişmiş performans."] },
+  "1-1": { baslik: "TEMEL ÇALIŞAN", renk: "#2d6cb5", aciklama: ["Performans gereklerini tutarlı biçimde yerine getirir ve arada sırada beklentileri aşar.", "Zaman içinde daha zorlu veya daha karmaşık bir pozisyonda performans gösterecek kapasiteye sahip olabilir.", "Lider ve rol modeli olarak kabul edilir."] },
+  "1-2": { baslik: "YÜKSEK ETKİLİ PERFORMANS GÖSTEREN", renk: "#3d7a52", aciklama: ["Tutarlı biçimde performans beklentilerini aşar.", "Daha geniş kapsamlı veya karmaşık bir pozisyonda da performans gösterebilir.", "Lider ve rol modeli, ayrıca da mevcut pozisyonunun ötesinde büyümeye ve gelişmeye aday olarak kabul edilir."] },
+  "0-0": { baslik: "DÜŞÜK PERFORMANS GÖSTEREN", renk: "#c0392b", aciklama: ["Performans gereklerini yerine getirememektedir.", "Zayıf bir potansiyel sergiler ve mevcut pozisyonunda gelişim istekliliği düşüktür."] },
+  "0-1": { baslik: "SAĞLAM PERFORMANS GÖSTEREN", renk: "#2d6cb5", aciklama: ["Performans gereklerini tutarlı biçimde yerine getirir ve arada sırada beklentileri aşar.", "Mevcut pozisyonunda kalmayı ve gelişmeyi arzular.", "Potansiyeline ulaşmıştır, VEYA yeni bir pozisyona geçmeye istekli değildir."] },
+  "0-2": { baslik: "KİLİT PERFORMANS GÖSTEREN", renk: "#2b5797", aciklama: ["Tutarlı biçimde performans beklentilerini aşar.", "Mevcut pozisyonunda kalmayı ve gelişmeyi arzular.", "Potansiyeline ulaşmıştır, VEYA yeni bir pozisyona geçmeye istekli değildir.", "Lider ve rol modeli olarak kabul edilir."] }
 };
 
 // 9-Grid konumuna göre gelişim/yönlendirme önerisi
@@ -852,10 +852,16 @@ function openEvalDrawer(emp) {
     const pos = gridPos(ev);
     const gk = pos ? sistemGerekce(ev) : "";
     if (!gk) return `<div class="field"><div style="background:#f3f4f7;border:1px dashed var(--line);border-radius:8px;padding:12px 14px;font-size:12.5px;color:var(--ink-soft)">Metrikleri (Potansiyel, Performans, Öğrenme Çevikliği) doldurdukça sistem burada otomatik bir <b>öneri ve gerekçe</b> oluşturacaktır.</div></div>`;
+    const cell = GRID9[pos.pot + "-" + pos.perf];
     return `<div class="field">
       <label style="color:var(--brass)">Sistem Önerisi ve Gerekçesi (otomatik oluşturulur)</label>
-      <div style="background:#faf8f3;border:1px solid var(--brass);border-radius:8px;padding:12px 14px">
-        <div style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:6px">9-Grid: ${gridKoord(pos)} — ${GRID9[pos.pot + "-" + pos.perf].baslik}</div>
+      <div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:8px">9-Grid: ${gridKoord(pos)} — ${cell.baslik}</div>
+      <div style="background:#eef1f6;border:1px solid #c9d2e0;border-radius:8px;padding:11px 14px;margin-bottom:8px">
+        <div style="font-size:11.5px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.03em;margin-bottom:5px">Bu grubun tanımı (matris)</div>
+        <ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.5;color:var(--ink)">${cell.aciklama.map((a) => `<li style="margin-bottom:3px">${a}</li>`).join("")}</ul>
+      </div>
+      <div style="background:#faf8f3;border:1px solid var(--brass);border-radius:8px;padding:11px 14px">
+        <div style="font-size:11.5px;font-weight:700;color:var(--brass);text-transform:uppercase;letter-spacing:.03em;margin-bottom:5px">Sistemin bu kişiye özel önerisi ve tespiti</div>
         <div style="font-size:13px;line-height:1.55;color:var(--ink)">${gk}</div>
       </div>
     </div>`;
