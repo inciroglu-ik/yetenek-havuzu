@@ -198,7 +198,7 @@ function isComplete(d) {
   const pOk = POTANSIYEL_FIELDS.every(([k]) => d.potansiyel?.[k]);
   const cOk = CEVIKLIK_FIELDS.every(([k]) => d.ogrenmeCevikligi?.[k] !== undefined && d.ogrenmeCevikligi?.[k] !== null);
   const perfOk = PERFORMANS_FIELDS.every(([k]) => d.performans?.[k]);
-  return pOk && cOk && perfOk && d.liderlikPotansiyeli && d.hazirOlmaSuresi && d.ayrilmaRiski && d.gerekce && d.gerekce.trim().length > 0;
+  return pOk && cOk && perfOk && d.liderlikPotansiyeli && d.hazirOlmaSuresi && d.ayrilmaRiski;
 }
 
 function formatKidem(kurumKidemiYil) {
@@ -817,6 +817,7 @@ function openEvalDrawer(emp) {
     const ev = { ...d, ...der };
     const pos = gridPos(ev);
     const oneri = sistemOnerisi(ev);
+    const gk = pos ? sistemGerekce(ev) : "";
     return `
     <div class="summary-box">
       <div class="row"><span>Ortalama Potansiyel</span><b>${der.ortalamaPotansiyel} / 5</b></div>
@@ -824,6 +825,7 @@ function openEvalDrawer(emp) {
       <div class="row"><span>Performans Sınıfı</span><b>${der.performansSinifi}</b></div>
       ${pos ? `<div class="row"><span>9-Grid Konumu</span><b>${GRID9[pos.pot + "-" + pos.perf].baslik}</b></div>` : ""}
       ${oneri ? `<div class="verdict ${oneri === "Evet" ? "ok" : "dev"}">Sistem Önerisi — Yetenek Havuzuna: ${oneri.toLocaleUpperCase("tr")}</div>` : ""}
+      ${gk ? `<div style="font-size:12.5px;color:var(--ink);line-height:1.5;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Sistem Gerekçesi (otomatik):</b> ${gk}</div>` : ""}
     </div>`;
   }
 
@@ -893,8 +895,9 @@ function openEvalDrawer(emp) {
       </div>
     </div>
     <div class="field">
-      <label>Gerekçe (Vaka / Çıktı / Reaksiyon — en az birini temel alınız)</label>
-      <textarea id="gerekce" rows="4" placeholder="Hangi olayda bu yetkinliği sergiledi? Hangi iş sonucuna katkı sağladı? Hangi krizde inisiyatif aldı?">${d.gerekce || ""}</textarea>
+      <label>Müdür Görüşü / Gerekçe (Vaka · Çıktı · Reaksiyon — opsiyonel)</label>
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:5px">Sistem, yukarıdaki özet kutusunda otomatik bir gerekçe üretir. Buraya <b>kendi görüşünüzü</b> ekleyebilirsiniz: hangi olayda bu yetkinliği sergiledi? Hangi iş sonucuna katkı sağladı?</div>
+      <textarea id="gerekce" rows="4" placeholder="Kendi değerlendirmenizi ve somut örneği buraya yazın…">${d.gerekce || ""}</textarea>
     </div>`;
   }
 
@@ -918,7 +921,6 @@ function openEvalDrawer(emp) {
     if (!d.liderlikPotansiyeli) mark('.comp-row[data-fieldkey="liderlikPotansiyeli"]');
     if (!d.hazirOlmaSuresi) mark("#hazirOlmaSuresi");
     if (!d.ayrilmaRiski) mark("#ayrilmaRiski");
-    if (!d.gerekce || !d.gerekce.trim()) mark("#gerekce");
     return firstBad;
   }
 
@@ -976,6 +978,7 @@ function openEvalDrawer(emp) {
       muduluk: emp.muduluk,
       ...d,
       ...der,
+      sistemGerekcesi: sistemGerekce({ ...d, ...der, adSoyad: emp.adSoyad }),
       status,
       submittedByUid: currentUid,
       submittedByName: currentProfile.adSoyad,
@@ -1002,7 +1005,7 @@ function openEvalDrawer(emp) {
       attemptedFinal = true;
       const firstBad = validateAndHighlight();
       if (firstBad) firstBad.scrollIntoView({ behavior: "smooth", block: "center" });
-      toast("Tamamlamak için tüm yetkinlikleri, hazır olma süresini, ayrılma riskini ve gerekçeyi doldurun.");
+      toast("Tamamlamak için tüm yetkinlikleri (Potansiyel, Performans, Öğrenme Çevikliği), liderlik potansiyelini, hazır olma süresini ve ayrılma riskini doldurun.");
       return;
     }
     save("tamamlandi");
@@ -1045,7 +1048,7 @@ function openAdminDetailDrawer(emp) {
       <div class="row"><span>9-Grid Konumu</span><b>${GRID9[pos.pot + "-" + pos.perf].baslik} (${POT_ETIKET[pos.pot]} / ${PERF_ETIKET[pos.perf]})</b></div>
       <div class="row"><span>Sistem Önerisi — Yetenek Havuzuna</span><b style="color:${oneri === "Evet" ? "var(--good)" : "var(--bad)"}">${(oneri || "—").toLocaleUpperCase("tr")}</b></div>
       <div class="row"><span>Yönetici Görüşü (AY)</span><b>${ev.yetenekHavuzuAlinmali || "—"}</b></div>
-      <div style="font-size:12.5px;color:var(--ink);line-height:1.5;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Neden:</b> ${gerekceSis}</div>
+      <div style="font-size:12.5px;color:var(--ink);line-height:1.5;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Sistem Gerekçesi:</b> ${gerekceSis}</div>
     </div>` : ""}
 
     <div class="section-title" style="margin-top:0">Genel</div>
