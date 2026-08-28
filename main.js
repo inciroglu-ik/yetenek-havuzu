@@ -159,6 +159,8 @@ function gridPos(ev) {
   if (p == null || q == null) return null;
   return { pot: p, perf: q };
 }
+// Görseldeki koordinat: dikey (üstten: Hızlanan=1, Gelişen=2, Duran=3) - yatay (soldan: Düşük=1, Normal=2, Yüksek=3)
+function gridKoord(pos) { return (3 - pos.pot) + "-" + (pos.perf + 1); }
 
 // İK sistem önerisi: performans + potansiyel + çeviklik + liderlik -> Evet/Hayır
 function sistemOnerisi(ev) {
@@ -847,11 +849,15 @@ function openEvalDrawer(emp) {
   function sistemKutuHtml() {
     const der = computeDerived(d);
     const ev = { ...d, ...der, adSoyad: emp.adSoyad };
-    const gk = gridPos(ev) ? sistemGerekce(ev) : "";
+    const pos = gridPos(ev);
+    const gk = pos ? sistemGerekce(ev) : "";
     if (!gk) return `<div class="field"><div style="background:#f3f4f7;border:1px dashed var(--line);border-radius:8px;padding:12px 14px;font-size:12.5px;color:var(--ink-soft)">Metrikleri (Potansiyel, Performans, Öğrenme Çevikliği) doldurdukça sistem burada otomatik bir <b>öneri ve gerekçe</b> oluşturacaktır.</div></div>`;
     return `<div class="field">
       <label style="color:var(--brass)">Sistem Önerisi ve Gerekçesi (otomatik oluşturulur)</label>
-      <div style="background:#faf8f3;border:1px solid var(--brass);border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.55;color:var(--ink)">${gk}</div>
+      <div style="background:#faf8f3;border:1px solid var(--brass);border-radius:8px;padding:12px 14px">
+        <div style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:6px">9-Grid: ${gridKoord(pos)} — ${GRID9[pos.pot + "-" + pos.perf].baslik}</div>
+        <div style="font-size:13px;line-height:1.55;color:var(--ink)">${gk}</div>
+      </div>
     </div>`;
   }
 
@@ -1072,10 +1078,12 @@ function openAdminDetailDrawer(emp) {
     const gerekceSis = sistemGerekce(ev);
     return `
     ${pos ? `<div class="summary-box" style="margin-top:0">
-      <div class="row"><span>9-Grid Konumu</span><b>${GRID9[pos.pot + "-" + pos.perf].baslik} (${POT_ETIKET[pos.pot]} / ${PERF_ETIKET[pos.perf]})</b></div>
+      <div style="font-size:18px;font-weight:800;color:#fff;letter-spacing:.02em;margin-bottom:2px">9-Grid: ${gridKoord(pos)} — ${GRID9[pos.pot + "-" + pos.perf].baslik}</div>
+      <div style="font-size:11.5px;color:#aeb7c6;margin-bottom:6px">Dikey (Liderlik Potansiyeli): ${POT_ETIKET[pos.pot]} · Yatay (Performans): ${PERF_ETIKET[pos.perf]}</div>
+      <ul style="margin:0 0 10px;padding-left:18px;font-size:12px;line-height:1.45;color:#cfd6e2">${GRID9[pos.pot + "-" + pos.perf].aciklama.map((a) => `<li style="margin-bottom:2px">${a}</li>`).join("")}</ul>
       <div class="row"><span>Sistem Önerisi — Yetenek Havuzuna</span><b style="color:${oneri === "Evet" ? "var(--good)" : "var(--bad)"}">${(oneri || "—").toLocaleUpperCase("tr")}</b></div>
       <div class="row"><span>Yönetici Görüşü (AY)</span><b>${ev.yetenekHavuzuAlinmali || "—"}</b></div>
-      <div style="font-size:12.5px;color:var(--ink);line-height:1.5;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Sistem Gerekçesi:</b> ${gerekceSis}</div>
+      <div style="font-size:12.5px;color:#dfe3ea;line-height:1.5;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.15)"><b style="color:#fff">Sistem Gerekçesi:</b> ${gerekceSis}</div>
     </div>` : ""}
 
     <div class="section-title" style="margin-top:0">Genel</div>
@@ -1258,7 +1266,7 @@ async function exportSinglePersonExcel(emp, ev) {
       const pos = gridPos(ev);
       sectionRow("Sistem Analizi (İK)");
       shade = false;
-      dataRow("9-Grid Konumu", pos ? `${GRID9[pos.pot + "-" + pos.perf].baslik} (${POT_ETIKET[pos.pot]} / ${PERF_ETIKET[pos.perf]})` : "—", { shade: (shade = !shade) });
+      dataRow("9-Grid Konumu", pos ? `${gridKoord(pos)} — ${GRID9[pos.pot + "-" + pos.perf].baslik} (${POT_ETIKET[pos.pot]} / ${PERF_ETIKET[pos.perf]})` : "—", { shade: (shade = !shade) });
       dataRow("Sistem Önerisi — Yetenek Havuzuna", (sistemOnerisi(ev) || "—").toLocaleUpperCase("tr"), { shade: (shade = !shade) });
       dataRow("Neden (Gerekçe)", sistemGerekce(ev), { shade: (shade = !shade), height: 60 });
 
@@ -1842,14 +1850,14 @@ function renderAdmin() {
 }
 
 function exportCsv() {
-  const headers = ["Ad Soyad", "Departman", "Bölüm", "Unvan", "Müdür", "Kıdem", "Durum", "9-Grid Grubu", "Liderlik Pot. (eksen)", "Performans (eksen)", "Ort. Potansiyel", "Öğr. Çeviklik %", "Performans Sınıfı", "Sistem Önerisi (Havuz)", "Sistem Gerekçesi", "Yönetici Görüşü (Havuz)", "Liderlik Potansiyeli", "Hazır Olma Süresi", "Ayrılma Riski", "Fonksiyonel Geçişe Uygun", "Fonksiyonel Geçiş Departman/Rol", "Yedekleyebileceği Pozisyon", "Gelişim Alanları", "Gerekçe (Yönetici)", ...PERFORMANS_FIELDS.map(([, l]) => l)];
+  const headers = ["Ad Soyad", "Departman", "Bölüm", "Unvan", "Müdür", "Kıdem", "Durum", "9-Grid Kod", "9-Grid Grubu", "Liderlik Pot. (eksen)", "Performans (eksen)", "Ort. Potansiyel", "Öğr. Çeviklik %", "Performans Sınıfı", "Sistem Önerisi (Havuz)", "Sistem Gerekçesi", "Yönetici Görüşü (Havuz)", "Liderlik Potansiyeli", "Hazır Olma Süresi", "Ayrılma Riski", "Fonksiyonel Geçişe Uygun", "Fonksiyonel Geçiş Departman/Rol", "Yedekleyebileceği Pozisyon", "Gelişim Alanları", "Gerekçe (Yönetici)", ...PERFORMANS_FIELDS.map(([, l]) => l)];
   const rows = adminRoster().map((e) => {
     const ev = evaluationsMap[e.id] || {};
     const pos = gridPos(ev);
     return [
       e.adSoyad, e.departman, e.bolum, e.mevcutUnvan, e.muduluk || "", formatKidem(e.kurumKidemiYil),
       kidemDisi(e) ? "Kıdem<6ay (dışı)" : (ev.status || "bekliyor"),
-      pos ? GRID9[pos.pot + "-" + pos.perf].baslik : "", pos ? POT_ETIKET[pos.pot] : "", pos ? PERF_ETIKET[pos.perf] : "",
+      pos ? gridKoord(pos) : "", pos ? GRID9[pos.pot + "-" + pos.perf].baslik : "", pos ? POT_ETIKET[pos.pot] : "", pos ? PERF_ETIKET[pos.perf] : "",
       ev.ortalamaPotansiyel ?? "", ev.ortalamaOgrenmeCevikligi != null ? Math.round(ev.ortalamaOgrenmeCevikligi * 100) : "",
       ev.performansSinifi || (ev.status ? sinifLabel(performansSkoru(ev)) : ""), (ev.status ? (sistemOnerisi(ev) || "") : ""), (ev.status ? sistemGerekce(ev) : "").replace(/\n/g, " "),
       ev.yetenekHavuzuAlinmali || "", ev.liderlikPotansiyeli || "",
