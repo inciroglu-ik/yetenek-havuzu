@@ -102,6 +102,12 @@ const KIDEM_ESIK = 0.5;
 function kidemDisi(emp) {
   return emp && typeof emp.kurumKidemiYil === "number" && emp.kurumKidemiYil < KIDEM_ESIK;
 }
+// Çalışan listesindeki tüm distinct unvanlar (fonksiyonel geçiş seçenekleri)
+function tumUnvanlar() {
+  const set = new Set();
+  employeesCache.forEach((e) => { if (e.mevcutUnvan) set.add(e.mevcutUnvan.trim()); });
+  return [...set].sort((a, b) => a.localeCompare(b, "tr"));
+}
 
 // ---------------------------------------------------------------
 // 9-GRID (Performans × Liderlik Potansiyeli) — İnsanlar Üzerine Değerlendirme
@@ -788,6 +794,7 @@ function openEvalDrawer(emp) {
     gelisimAlanlari: existing.gelisimAlanlari || "",
     fonksiyonelGecisUygun: existing.fonksiyonelGecisUygun || "",
     fonksiyonelGecisDept: existing.fonksiyonelGecisDept || "",
+    fonksiyonelGecisPozisyonlar: existing.fonksiyonelGecisPozisyonlar || (existing.fonksiyonelGecisDept ? existing.fonksiyonelGecisDept.split(/[,;]/).map((s) => s.trim()).filter(Boolean) : []),
     gerekce: existing.gerekce || ""
   };
 
@@ -918,18 +925,20 @@ function openEvalDrawer(emp) {
       <label>Gelişim Alanları</label>
       <textarea id="gelisimAlanlari" rows="2" placeholder="Geliştirilmesi gereken alanlar…">${d.gelisimAlanlari || ""}</textarea>
     </div>
-    <div class="two-col">
-      <div class="field">
-        <label>Fonksiyonel Geçişe Uygun mu?</label>
-        <select id="fonksiyonelGecisUygun">
-          <option value="">Seçiniz</option>
-          ${["Evet", "Hayır"].map((o) => `<option value="${o}" ${d.fonksiyonelGecisUygun === o ? "selected" : ""}>${o}</option>`).join("")}
-        </select>
+    <div class="field">
+      <label>Fonksiyonel Geçişe Uygun mu?</label>
+      <select id="fonksiyonelGecisUygun">
+        <option value="">Seçiniz</option>
+        ${["Evet", "Hayır"].map((o) => `<option value="${o}" ${d.fonksiyonelGecisUygun === o ? "selected" : ""}>${o}</option>`).join("")}
+      </select>
+    </div>
+    <div class="field">
+      <label>Geçiş Yapabileceği Pozisyon(lar) — çalışan listesindeki unvanlardan, birden fazla seçilebilir</label>
+      <input type="text" id="pozAra" placeholder="Unvan ara…" style="margin-bottom:6px">
+      <div class="checklist" id="pozList" style="max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px">
+        ${tumUnvanlar().map((u) => `<label style="display:flex;gap:7px;align-items:center;padding:2px 0" data-unvan="${u.toLocaleLowerCase("tr")}"><input type="checkbox" value="${u.replace(/"/g, "&quot;")}" ${d.fonksiyonelGecisPozisyonlar.includes(u) ? "checked" : ""}> ${u}</label>`).join("")}
       </div>
-      <div class="field">
-        <label>Uygun Departman / Rol</label>
-        <input type="text" id="fonksiyonelGecisDept" value="${d.fonksiyonelGecisDept || ""}" placeholder="Örn: Yedek Parça">
-      </div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:4px">Seçili: <b id="pozSecili">${d.fonksiyonelGecisPozisyonlar.length ? d.fonksiyonelGecisPozisyonlar.join(", ") : "—"}</b></div>
     </div>
     ${sistemKutuHtml()}
     <div class="field">
@@ -995,10 +1004,27 @@ function openEvalDrawer(emp) {
         });
       });
     });
-    ["hazirOlmaSuresi", "ayrilmaRiski", "yedekPozisyonlar", "gelisimAlanlari", "fonksiyonelGecisUygun", "fonksiyonelGecisDept", "gerekce"].forEach((id) => {
+    ["hazirOlmaSuresi", "ayrilmaRiski", "yedekPozisyonlar", "gelisimAlanlari", "fonksiyonelGecisUygun", "gerekce"].forEach((id) => {
       const node = document.getElementById(id);
       if (node) node.addEventListener("input", () => { d[id] = node.value; validateAndHighlight(); scheduleAutosave(); });
     });
+    const pozList = document.getElementById("pozList");
+    if (pozList) {
+      pozList.addEventListener("change", () => {
+        d.fonksiyonelGecisPozisyonlar = Array.from(pozList.querySelectorAll("input:checked")).map((c) => c.value);
+        d.fonksiyonelGecisDept = d.fonksiyonelGecisPozisyonlar.join(", ");
+        const sec = document.getElementById("pozSecili");
+        if (sec) sec.textContent = d.fonksiyonelGecisPozisyonlar.length ? d.fonksiyonelGecisPozisyonlar.join(", ") : "—";
+        scheduleAutosave();
+      });
+    }
+    const pozAra = document.getElementById("pozAra");
+    if (pozAra) {
+      pozAra.addEventListener("input", () => {
+        const t = pozAra.value.trim().toLocaleLowerCase("tr");
+        pozList.querySelectorAll("label[data-unvan]").forEach((lb) => { lb.style.display = (!t || lb.dataset.unvan.includes(t)) ? "flex" : "none"; });
+      });
+    }
   }
 
   refresh();
@@ -1738,6 +1764,10 @@ function renderAdmin() {
           <option value="">9-Grid — Hepsi</option>
           ${Object.keys(GRID9).map((k) => { const pt = Number(k.split("-")[0]), pf = Number(k.split("-")[1]); return `<option value="${k}">${(3 - pt)}-${(pf + 1)} · ${GRID9[k].baslik}</option>`; }).join("")}
         </select>
+        <select id="gecisFilter" title="Fonksiyonel geçiş yapabileceği pozisyon">
+          <option value="">Geçiş Pozisyonu — Hepsi</option>
+          ${tumUnvanlar().map((u) => `<option value="${u.replace(/"/g, "&quot;")}">${u}</option>`).join("")}
+        </select>
         <button class="btn btn-brass btn-sm" id="topluKarneBtn">Listeyi A4 Karne Yazdır</button>
       </div>
       <div class="table-scroll">
@@ -1808,6 +1838,7 @@ function renderAdmin() {
     const oneriF = el("#oneriFilter").value;
     const liderF = el("#liderlikFilter").value;
     const gridF = el("#gridFilter").value;
+    const gecisF = el("#gecisFilter").value;
     const col = ADMIN_COLUMNS.find((c) => c.key === sortState.key);
     const list = roster
       .filter((e) => e.adSoyad.toLocaleLowerCase("tr").includes(term))
@@ -1820,6 +1851,12 @@ function renderAdmin() {
       .filter((e) => !oneriF || (evaluationsMap[e.id] && sistemOnerisi(evaluationsMap[e.id]) === oneriF))
       .filter((e) => !liderF || evaluationsMap[e.id]?.liderlikPotansiyeli === liderF)
       .filter((e) => { if (!gridF) return true; const p = evaluationsMap[e.id] && gridPos(evaluationsMap[e.id]); return p && (p.pot + "-" + p.perf) === gridF; })
+      .filter((e) => {
+        if (!gecisF) return true;
+        const ev = evaluationsMap[e.id]; if (!ev) return false;
+        if (Array.isArray(ev.fonksiyonelGecisPozisyonlar)) return ev.fonksiyonelGecisPozisyonlar.includes(gecisF);
+        return (ev.fonksiyonelGecisDept || "").split(/[,;]/).map((x) => x.trim()).includes(gecisF);
+      })
       .sort((a, b) => {
         const va = col.get(a, evaluationsMap[a.id]);
         const vb = col.get(b, evaluationsMap[b.id]);
@@ -1858,7 +1895,7 @@ function renderAdmin() {
     });
   });
 
-  ["searchBox", "managerFilter", "deptFilter", "statusFilter", "riskFilter", "readyFilter", "havuzFilter", "oneriFilter", "liderlikFilter", "gridFilter"].forEach((id) => {
+  ["searchBox", "managerFilter", "deptFilter", "statusFilter", "riskFilter", "readyFilter", "havuzFilter", "oneriFilter", "liderlikFilter", "gridFilter", "gecisFilter"].forEach((id) => {
     el("#" + id).addEventListener("input", draw);
     el("#" + id).addEventListener("change", draw);
   });
@@ -2166,7 +2203,8 @@ function openManagePanel() {
           potansiyel: row.potansiyel || {}, ogrenmeCevikligi: row.ogrenmeCevikligi || {}, performans: row.performans || {},
           liderlikPotansiyeli: row.liderlikPotansiyeli || "", yetenekHavuzuAlinmali: row.yetenekHavuzuAlinmali || "",
           hazirOlmaSuresi: row.hazirOlmaSuresi || "", yedekPozisyonlar: row.yedekPozisyonlar || "", ayrilmaRiski: row.ayrilmaRiski || "",
-          gelisimAlanlari: row.gelisimAlanlari || "", fonksiyonelGecisUygun: row.fonksiyonelGecisUygun || "", fonksiyonelGecisDept: row.fonksiyonelGecisDept || "", gerekce: ""
+          gelisimAlanlari: row.gelisimAlanlari || "", fonksiyonelGecisUygun: row.fonksiyonelGecisUygun || "", fonksiyonelGecisDept: row.fonksiyonelGecisDept || "",
+          fonksiyonelGecisPozisyonlar: row.fonksiyonelGecisDept ? row.fonksiyonelGecisDept.split(/[,;]/).map((s) => s.trim()).filter(Boolean) : [], gerekce: ""
         };
         const der = computeDerived(d);
         const payload = {
