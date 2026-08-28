@@ -2073,7 +2073,9 @@ function openManagePanel() {
         await b.commit();
       }
       msg.style.color = "var(--good)";
-      msg.textContent = `✓ ${ok} değerlendirme aktarıldı.${bulunamadi ? ` ${bulunamadi} kişi roster'da bulunamadı: ${eksikler.join(", ")}${bulunamadi > eksikler.length ? "…" : ""}` : ""}`;
+      let ek = "";
+      if (bulunamadi) ek = " " + bulunamadi + " kişi roster'da bulunamadı: " + eksikler.join(", ") + (bulunamadi > eksikler.length ? "…" : "");
+      msg.textContent = "✓ " + ok + " değerlendirme aktarıldı." + ek;
     } catch (e) {
       msg.style.color = "var(--bad)"; msg.textContent = "Hata: " + e.message;
     }
