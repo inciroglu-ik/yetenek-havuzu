@@ -1148,7 +1148,7 @@ const ROSTER_2026 = [
         "bolum":  "Satış",
         "mevcutUnvan":  "Resepsiyonst",
         "muduluk":  "MEHMET TİRYAKİ",
-        "direktor":  "-",
+        "direktor":  "HÜSEYİN UĞUR ŞAKİROĞLU",
         "iseBaslamaTarihi":  "18/06/2026",
         "kurumKidemiYil":  0.2
     },
