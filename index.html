@@ -204,6 +204,33 @@
   .save-status.saving{color:#f1d9a8;}
   .save-status.saved{color:#a8dab5;}
   .save-status.error{color:#f3a9a9;}
+
+  /* ---------- tamamlama oranları (completion) ---------- */
+  .tc-row{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden;}
+  .tc-head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;transition:background .12s;}
+  .tc-head:hover{background:#faf9f6;}
+  .tc-row.open .tc-head{background:#f4f2ec;}
+  .tc-body{flex:1;min-width:0;}
+  .tc-name{font-size:14px;font-weight:600;color:var(--ink);}
+  .tc-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .tc-pct{font-family:'Source Serif 4',Georgia,serif;font-weight:700;font-size:16px;}
+  .tc-chev{flex:none;color:var(--ink-soft);transition:transform .18s, color .12s;}
+  .tc-head:hover .tc-chev{color:var(--navy);}
+  .tc-row.open .tc-chev{transform:rotate(90deg);}
+  .tc-head:focus-visible{outline:2px solid var(--brass);outline-offset:-2px;border-radius:12px;}
+  .tc-detail{border-top:1px solid var(--line);padding:12px 16px 14px;background:#fbfaf7;display:none;}
+  .tc-row.open .tc-detail{display:block;}
+  .pbar{margin-top:7px;}
+  .pbar .lab{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;margin-bottom:3px;color:var(--ink-soft);}
+  .pbar .lab b{color:var(--navy);font-weight:600;}
+  .tc-mini{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 2px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--ink);}
+  .tc-mini:last-child{border-bottom:none;}
+  .tc-cap{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.04em;margin:0 0 6px;}
+  .tc-cap+.tc-cap,.tc-detail .tc-cap:not(:first-child){margin-top:14px;}
+  /* şerit: müdür/direktör satırlarında biraz daha kalın (metre hissi, yükleme çubuğu değil) */
+  .tc-body .bar-track,.pbar .bar-track{height:10px;}
+  /* "veri yok" — boş ray yerine soluk çizgili desen (0% ile karışmasın) */
+  .bar-empty{background:repeating-linear-gradient(90deg,#e6e2d7 0 7px,#f1eee6 7px 14px);}
 </style>
 </head>
 <body>

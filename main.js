@@ -237,7 +237,9 @@ function formatKidem(kurumKidemiYil) {
 // ---------------------------------------------------------------
 // UI kit: avatars, sidebar icons
 // ---------------------------------------------------------------
-const AVATAR_COLORS = ["#233047", "#a9772c", "#3d7a52", "#6b4fa0", "#1f7a8c", "#a13030", "#4a5568", "#8a5a2b"];
+// Kurumsal palet — yalnız lacivert/pirinç/arduvaz/kahve tonları (mor/turkuaz yok,
+// semantik kırmızı-yeşil yok ki avatar bir "uyarı/durum" gibi okunmasın).
+const AVATAR_COLORS = ["#233047", "#a9772c", "#4a5568", "#8a5a2b", "#3a4a63", "#6b5738", "#5b6675", "#7a5a30"];
 function avatarHtml(name, size) {
   size = size || 34;
   const n = (name || "?").trim();
@@ -251,7 +253,8 @@ function avatarHtml(name, size) {
 const ICONS = {
   grid: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5" fill="currentColor"/><rect x="13" y="3" width="8" height="8" rx="1.5" fill="currentColor" opacity=".55"/><rect x="3" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".55"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".85"/></svg>`,
   people: `<svg width="16" height="16" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4" fill="currentColor"/><path d="M2.5 20c0-4 3-6.5 6.5-6.5s6.5 2.5 6.5 6.5" fill="currentColor" opacity=".85"/><circle cx="17.5" cy="8.5" r="2.6" fill="currentColor" opacity=".55"/><path d="M14.8 13.9c1-.6 2.1-.9 3-.9 2.8 0 5 2 5.2 5" fill="currentColor" opacity=".55"/></svg>`,
-  gear: `<svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 15.4a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8Z" fill="currentColor"/><path d="M19.4 13.6l1.7-1-2-3.4-1.9.7a6.9 6.9 0 0 0-1.5-.9l-.3-2h-4l-.3 2a6.9 6.9 0 0 0-1.5.9l-1.9-.7-2 3.4 1.7 1a7 7 0 0 0 0 1.7l-1.7 1 2 3.4 1.9-.7c.4.4 1 .7 1.5.9l.3 2h4l.3-2c.5-.2 1.1-.5 1.5-.9l1.9.7 2-3.4-1.7-1a7 7 0 0 0 0-1.7Z" fill="currentColor" opacity=".55"/></svg>`
+  gear: `<svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 15.4a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8Z" fill="currentColor"/><path d="M19.4 13.6l1.7-1-2-3.4-1.9.7a6.9 6.9 0 0 0-1.5-.9l-.3-2h-4l-.3 2a6.9 6.9 0 0 0-1.5.9l-1.9-.7-2 3.4 1.7 1a7 7 0 0 0 0 1.7l-1.7 1 2 3.4 1.9-.7c.4.4 1 .7 1.5.9l.3 2h4l.3-2c.5-.2 1.1-.5 1.5-.9l1.9.7 2-3.4-1.7-1a7 7 0 0 0 0-1.7Z" fill="currentColor" opacity=".55"/></svg>`,
+  progress: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="4" rx="2" fill="currentColor" opacity=".32"/><rect x="3" y="5" width="12" height="4" rx="2" fill="currentColor"/><rect x="3" y="15" width="18" height="4" rx="2" fill="currentColor" opacity=".32"/><rect x="3" y="15" width="7" height="4" rx="2" fill="currentColor" opacity=".7"/></svg>`
 };
 
 function sidebarHtml(items, activeKey) {
@@ -1461,6 +1464,177 @@ function barListHtml(data) {
     </div>`).join("");
 }
 
+// ---------------------------------------------------------------
+// TAMAMLAMA ORANLARI (müdür + direktör)
+// ---------------------------------------------------------------
+// Oran rengi: tam (yeşil) · kısmi (kehribar) · düşük (kırmızı)
+function tcRenk(r) {
+  if (r == null) return "#9aa2ad";
+  if (r >= 0.999) return "var(--good)";   // tamam
+  if (r >= 0.8) return "var(--navy)";     // yolunda
+  if (r >= 0.5) return "var(--warn)";     // kısmi
+  return "var(--bad)";                    // düşük
+}
+// Yüzde şeridi (etiket + done/total + dolu çubuk)
+function pbarHtml(label, sub, rate) {
+  if (rate == null) {
+    return `<div class="pbar">
+      <div class="lab"><span>${label}</span><b style="color:var(--ink-soft);font-weight:500">${sub ? sub + " · " : ""}veri yok</b></div>
+      <div class="bar-track bar-empty"></div>
+    </div>`;
+  }
+  const pct = Math.round(rate * 100);
+  return `<div class="pbar">
+    <div class="lab"><span>${label}</span><b>${sub ? sub + " · " : ""}${pct}%</b></div>
+    <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${tcRenk(rate)}${pct === 0 ? ";min-width:3px" : ""}"></div></div>
+  </div>`;
+}
+// Aç/kapa oku (font-bağımsız SVG; .tc-row.open ile 90° döner)
+const TC_CHEV = `<svg class="tc-chev" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+// İsimle güvenli sıralama (adSoyad boş olabilir)
+function tcAdSirala(a, b) { return (a.adSoyad || "").localeCompare(b.adSoyad || "", "tr"); }
+// Şerit çubuğu HTML'i (null→soluk, %0→ince işaret)
+function tcBar(rate) {
+  if (rate == null) return `<div class="bar-track bar-empty" style="margin-top:7px"></div>`;
+  const pct = Math.round(rate * 100);
+  return `<div class="bar-track" style="margin-top:7px"><div class="bar-fill" style="width:${pct}%;background:${tcRenk(rate)}${pct === 0 ? ";min-width:3px" : ""}"></div></div>`;
+}
+// Bir kişinin değerlendirme durum rozeti
+function tcRozet(id, tamamMetin) {
+  const st = evaluationsMap[id]?.status;
+  if (st === "tamamlandi") return `<span class="status-badge status-tamamlandi">${tamamMetin || "Tamamlandı"}</span>`;
+  if (st === "taslak") return `<span class="status-badge status-taslak">Taslak</span>`;
+  return `<span class="status-badge status-bekliyor">Bekliyor</span>`;
+}
+// Müdür + direktör tamamlama verisini employeesCache + evaluationsMap'ten üretir.
+function buildCompletionData() {
+  const emps = employeesCache;
+  const isDone = (e) => evaluationsMap[e.id]?.status === "tamamlandi";
+  const empByName = {};
+  emps.forEach((e) => { if (e.adSoyad) empByName[nameKey(e.adSoyad)] = e; });
+
+  // --- MÜDÜRLER: müdürlük sütunundaki her benzersiz isim bir müdürdür ---
+  const mgrNames = Array.from(new Set(emps.map((e) => e.muduluk).filter((m) => m && m !== "-")))
+    .sort((a, b) => a.localeCompare(b, "tr"));
+  const mgrs = mgrNames.map((mgr) => {
+    const rec = empByName[nameKey(mgr)] || null;
+    const team = emps.filter((e) => e.muduluk === mgr && e.adSoyad !== mgr && !kidemDisi(e));
+    const doneCount = team.filter(isDone).length;
+    return {
+      name: mgr,
+      dept: (rec && rec.departman) || (team[0] && team[0].departman) || "",
+      direktor: (rec && rec.direktor) || (team[0] && team[0].direktor) || "",
+      team, total: team.length, doneCount,
+      rate: team.length ? doneCount / team.length : null
+    };
+  });
+  const mgrByName = {};
+  mgrs.forEach((m) => { mgrByName[nameKey(m.name)] = m; });
+
+  // --- DİREKTÖRLER: direktör sütunundaki her benzersiz isim bir direktördür ---
+  const dirNames = Array.from(new Set(emps.map((e) => e.direktor).filter((d) => d && d !== "-")))
+    .sort((a, b) => a.localeCompare(b, "tr"));
+  const dirs = dirNames.map((dir) => {
+    const rec = empByName[nameKey(dir)] || null;
+    // Bu direktöre bağlı müdürler (müdürlük sütununda kendi adı olan personel)
+    const mudurEmps = emps.filter((e) => e.direktor === dir && e.muduluk === e.adSoyad && !kidemDisi(e));
+    // A ETKENİ: direktörün müdürlerini kendisi değerlendirmesi
+    const aDone = mudurEmps.filter(isDone).length;
+    const rateA = mudurEmps.length ? aDone / mudurEmps.length : null;
+    // B ETKENİ: bağlı müdürlerin ekip-tamamlama oranlarının ortalaması (ekibi olmayan müdür hariç)
+    const bMgrs = mudurEmps.map((me) => mgrByName[nameKey(me.adSoyad)]).filter(Boolean);
+    const bWithTeam = bMgrs.filter((m) => m.total > 0);
+    const rateB = bWithTeam.length ? bWithTeam.reduce((s, m) => s + m.rate, 0) / bWithTeam.length : null;
+    return {
+      name: dir, dept: (rec && rec.departman) || "",
+      mudurEmps, aDone, aTotal: mudurEmps.length, rateA,
+      bMgrs, rateB, bWithTeamCount: bWithTeam.length
+    };
+  });
+  return { mgrs, dirs };
+}
+// Bir müdür satırı (şerit + tıklanınca ekip kırılımı)
+function tcMgrRow(m) {
+  const pct = m.rate == null ? "—" : Math.round(m.rate * 100) + "%";
+  const col = tcRenk(m.rate);
+  const detail = m.total === 0
+    ? `<div style="color:var(--ink-soft);font-size:12.5px">Değerlendirilecek ekip üyesi yok.</div>`
+    : m.team.slice().sort(tcAdSirala).map((e) =>
+        `<div class="tc-mini"><span>${e.adSoyad}<small style="color:var(--ink-soft)"> · ${e.mevcutUnvan || ""}</small></span>${tcRozet(e.id)}</div>`
+      ).join("");
+  return `<div class="tc-row">
+    <div class="tc-head" role="button" tabindex="0" aria-expanded="false">
+      ${avatarHtml(m.name, 38)}
+      <div class="tc-body">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+          <span class="tc-name">${m.name}</span>
+          <span class="tc-pct" style="color:${col}">${pct}</span>
+        </div>
+        <div class="tc-sub">${m.dept || "—"} · ${m.doneCount}/${m.total} tamamlandı</div>
+        ${tcBar(m.rate)}
+      </div>
+      ${TC_CHEV}
+    </div>
+    <div class="tc-detail">${detail}</div>
+  </div>`;
+}
+// Bir direktör satırı (iki şerit: A=müdürlerini değerlendirme, B=ekip tamamlanması)
+function tcDirRow(d) {
+  const aDetail = d.mudurEmps.length
+    ? d.mudurEmps.slice().sort(tcAdSirala).map((me) =>
+        `<div class="tc-mini"><span>${me.adSoyad}</span>${tcRozet(me.id, "Değerlendirildi")}</div>`).join("")
+    : `<div style="color:var(--ink-soft);font-size:12.5px">Bağlı müdür bulunamadı.</div>`;
+  const bDetail = d.bMgrs.length
+    ? d.bMgrs.slice().sort((a, b) => (a.name || "").localeCompare(b.name || "", "tr")).map((m) => {
+        const p = m.rate == null ? "—" : Math.round(m.rate * 100) + "%";
+        return `<div class="tc-mini"><span>${m.name}<small style="color:var(--ink-soft)"> · ${m.doneCount}/${m.total}</small></span><b style="color:${tcRenk(m.rate)}">${p}</b></div>`;
+      }).join("")
+    : `<div style="color:var(--ink-soft);font-size:12.5px">Bağlı müdür bulunamadı.</div>`;
+  const headPct = d.rateB == null ? "—" : Math.round(d.rateB * 100) + "%";
+  return `<div class="tc-row">
+    <div class="tc-head" role="button" tabindex="0" aria-expanded="false">
+      ${avatarHtml(d.name, 38)}
+      <div class="tc-body">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+          <span class="tc-name">${d.name}${d.dept ? ` <span class="tc-sub" style="display:inline;margin-left:4px">· ${d.dept}</span>` : ""}</span>
+          <span class="tc-pct" style="color:${tcRenk(d.rateB)}" title="Müdür ekiplerinin tamamlanması">${headPct}</span>
+        </div>
+        ${pbarHtml("Müdürlerini değerlendirmesi", d.aDone + "/" + d.aTotal, d.rateA)}
+        ${pbarHtml("Müdür ekiplerinin tamamlanması", d.bWithTeamCount + " müdür", d.rateB)}
+      </div>
+      ${TC_CHEV}
+    </div>
+    <div class="tc-detail">
+      <div class="tc-cap">Direktörün müdür değerlendirmeleri</div>
+      ${aDetail}
+      <div class="tc-cap">Müdür ekiplerinin tamamlanma oranı</div>
+      ${bDetail}
+    </div>
+  </div>`;
+}
+// "Tamamlama Oranları" sekmesinin tüm gövdesi
+function tamamlamaTabHtml(cd) {
+  const withTeam = cd.mgrs.filter((m) => m.total > 0);
+  const avgMgr = withTeam.length ? withTeam.reduce((s, m) => s + m.rate, 0) / withTeam.length : null;
+  const fullMgr = withTeam.filter((m) => m.rate >= 0.999).length;
+  return `<div id="tabTamamlama" style="display:none">
+    <div style="max-width:1060px">
+    <div class="stat-row">
+      <div class="stat-card"><div class="n">${cd.mgrs.length}</div><div class="l">Müdür</div></div>
+      <div class="stat-card"><div class="n">${avgMgr == null ? "—" : Math.round(avgMgr * 100) + "%"}</div><div class="l">Ort. Müdür Tamamlama</div></div>
+      <div class="stat-card"><div class="n">${fullMgr}</div><div class="l">Tümünü Tamamlayan Müdür</div></div>
+      <div class="stat-card"><div class="n">${cd.dirs.length}</div><div class="l">Direktör</div></div>
+    </div>
+    <div class="section-title" style="margin-top:8px">Müdür Tamamlama Oranları</div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 12px">Her müdürün kendi ekibi için tamamladığı değerlendirme oranı. Satıra tıklayınca ekibindeki kişilerin durumu (tamamlandı / taslak / bekliyor) görünür.</p>
+    <div class="card-list">${cd.mgrs.map(tcMgrRow).join("") || `<div class="empty-state">Müdür bulunamadı.</div>`}</div>
+    <div class="section-title" style="margin-top:26px">Direktör Tamamlama Oranları</div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 12px">İki ölçüt: <b>müdürlerini değerlendirmesi</b> (direktörün kendi doldurduğu) ve <b>müdür ekiplerinin tamamlanması</b> (bağlı müdürlerin ekip oranlarının ortalaması). Satıra tıklayınca kırılım görünür.</p>
+    <div class="card-list">${cd.dirs.map(tcDirRow).join("") || `<div class="empty-state">Direktör bulunamadı.</div>`}</div>
+    </div>
+  </div>`;
+}
+
 let _jspdfLoadPromise = null;
 function loadJsPDF() {
   if (window.jspdf) return Promise.resolve();
@@ -1646,6 +1820,7 @@ function renderAdmin() {
     .sort((a, b) => (evaluationsMap[b.id]?.ortalamaPotansiyel || 0) - (evaluationsMap[a.id]?.ortalamaPotansiyel || 0));
 
   const summaryCtx = { total, done, draft, havuzEvet, liderlikVar, fonksiyonelEvet, deptData, box9, kritikRisk, evaluationsMap };
+  const compData = buildCompletionData();
 
   root().innerHTML = `
   ${topbar()}
@@ -1653,6 +1828,7 @@ function renderAdmin() {
     ${sidebarHtml([
       { key: "overview", icon: ICONS.grid, label: "Genel Bakış" },
       { key: "list", icon: ICONS.people, label: "Personel Listesi" },
+      { key: "tamamlama", icon: ICONS.progress, label: "Tamamlama Oranları" },
       { key: "manage", icon: ICONS.gear, label: "Yönetim" }
     ], "overview")}
     <div class="main-content">
@@ -1802,6 +1978,7 @@ function renderAdmin() {
         </table>
       </div>
     </div>
+    ${tamamlamaTabHtml(compData)}
     </div>
     </div>
   </div>`;
@@ -1843,7 +2020,18 @@ function renderAdmin() {
       document.querySelectorAll(".sidebar .nav-item").forEach((n) => n.classList.toggle("active", n === item));
       el("#tabOverview").style.display = key === "overview" ? "" : "none";
       el("#tabList").style.display = key === "list" ? "" : "none";
+      const tt = el("#tabTamamlama"); if (tt) tt.style.display = key === "tamamlama" ? "" : "none";
     });
+  });
+
+  // Tamamlama satırlarını aç/kapa (fare + klavye + aria)
+  document.querySelectorAll("#tabTamamlama .tc-head").forEach((h) => {
+    const toggle = () => {
+      const open = h.parentElement.classList.toggle("open");
+      h.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    h.addEventListener("click", toggle);
+    h.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
   });
 
   let sortState = { key: "adSoyad", dir: 1 };
