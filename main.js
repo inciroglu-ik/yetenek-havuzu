@@ -12,6 +12,11 @@ import {
 const auth = getAuth(app);
 const db = getFirestore(app);
 const el = (sel) => document.querySelector(sel);
+
+// Portal iframe'i içinde miyiz? (aynı origin'de panolar Firebase oturumunu PAYLAŞIR.)
+// Portaldan açıldığında, kişi KENDİ hesabıyla (form ile) girmeden önceki/paylaşılan
+// oturumu KULLANMA — yoksa bir müdür, tarayıcıda kalan İK/admin oturumunu devralır.
+const inPortal = (function () { try { return window.top !== window.self; } catch (e) { return true; } })();
 const root = () => document.getElementById("app");
 
 function toast(msg) {
@@ -383,6 +388,15 @@ function adminRoster() {
 onAuthStateChanged(auth, async (user) => {
   if (unsubEval) unsubEval();
   if (unsubEmp) unsubEmp();
+  // Portaldan yeni açıldıysa ve kişi henüz bu panoda giriş yapmadıysa: paylaşılan/eski
+  // oturumu at ki doğru kişi kendi yetkisiyle girsin (İK/admin oturumu devralınmasın).
+  // Depolama okunamazsa "1" kabul edip guard'ı atlarız (kilitlenmeyi önlemek için).
+  let fbFlag = "1";
+  try { fbFlag = sessionStorage.getItem("fbFormLogin"); } catch (e) {}
+  if (user && inPortal && fbFlag !== "1") {
+    await signOut(auth);
+    return;
+  }
   if (!user) {
     currentUid = null;
     currentProfile = null;
@@ -515,8 +529,11 @@ function renderLogin(errMsg) {
     btn.disabled = true;
     btn.textContent = "Giriş yapılıyor…";
     try {
+      // Bu giriş kişinin KENDİ form girişi — oturumu güvenilir işaretle (portal devralma koruması).
+      try { sessionStorage.setItem("fbFormLogin", "1"); } catch (e) {}
       await signInWithEmailAndPassword(auth, `${u}@${LOGIN_DOMAIN}`, p);
     } catch (err) {
+      try { sessionStorage.removeItem("fbFormLogin"); } catch (e) {}
       const box = el("#loginErr");
       box.style.display = "block";
       box.textContent = "Kullanıcı adı veya şifre hatalı.";
@@ -564,7 +581,7 @@ function topbar() {
 }
 
 function wireTopbar() {
-  el("#logoutBtn").addEventListener("click", () => signOut(auth));
+  el("#logoutBtn").addEventListener("click", () => { try { sessionStorage.removeItem("fbFormLogin"); } catch (e) {} signOut(auth); });
   el("#pwBtn").addEventListener("click", () => openPasswordModal());
   const ds = el("#donemSel");
   if (ds) ds.addEventListener("change", () => setViewDonem(ds.value));
