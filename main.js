@@ -1229,7 +1229,7 @@ function openAdminDetailDrawer(emp) {
       </div>
       <div class="drawer-body">${bodyHtml()}</div>
       <div class="drawer-foot">
-        ${isDuzenlenebilir() ? `<button class="btn btn-brass" id="editFromDetail">Değerlendirmeyi Düzenle</button>` : ""}
+        ${currentProfile.isAdmin && isDuzenlenebilir() ? `<button class="btn btn-brass" id="editFromDetail">Değerlendirmeyi Düzenle</button>` : ""}
         <button class="btn btn-ghost" id="printKarneA4">A4 Karne Yazdır</button>
         <button class="btn btn-ghost" id="downloadPersonExcel">Excel Raporu İndir</button>
       </div>
