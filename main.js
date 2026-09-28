@@ -1760,7 +1760,8 @@ async function downloadExecutivePdf(ctx) {
 // ---------------------------------------------------------------
 // ADMIN VIEW
 // ---------------------------------------------------------------
-function statusBadgeHtml(ev) {
+function statusBadgeHtml(ev, emp) {
+  if (emp && kidemDisi(emp)) return `<span class="status-badge" style="background:#eef0f4;color:#6b7280">Değerlendirme Dışı</span>`;
   const st = ev?.status || "bekliyor";
   const l = st === "tamamlandi" ? "Tamamlandı" : st === "taslak" ? "Taslak" : "Bekliyor";
   return `<span class="status-badge status-${st}">${l}</span>`;
@@ -1771,7 +1772,7 @@ const ADMIN_COLUMNS = [
   { key: "bolum", label: "Bölüm", get: (e, ev) => e.bolum || "", render: (e, ev) => e.bolum || "" },
   { key: "kidem", label: "Kıdem", get: (e, ev) => (e.kurumKidemiYil ?? -1), render: (e, ev) => formatKidem(e.kurumKidemiYil) },
   { key: "gridKod", label: "9-Grid", get: (e, ev) => { const p = ev && gridPos(ev); return p ? (3 - p.pot) * 10 + (p.perf + 1) : -1; }, render: (e, ev) => { const p = ev && gridPos(ev); return p ? `<b>${gridKoord(p)}</b>` : "—"; } },
-  { key: "status", label: "Durum", get: (e, ev) => ev?.status || "bekliyor", render: (e, ev) => statusBadgeHtml(ev) },
+  { key: "status", label: "Durum", get: (e, ev) => kidemDisi(e) ? "dışı" : (ev?.status || "bekliyor"), render: (e, ev) => statusBadgeHtml(ev, e) },
   { key: "ortalamaPotansiyel", label: "Ort.<br>Potansiyel", get: (e, ev) => (ev?.ortalamaPotansiyel ?? -1), render: (e, ev) => ev?.ortalamaPotansiyel ?? "—" },
   { key: "performansSinifi", label: "Performans<br>Sınıfı", get: (e, ev) => ev?.performansSinifi || "", render: (e, ev) => `<span style="font-size:10px">${ev?.performansSinifi || "—"}</span>` },
   { key: "yetenekHavuzuAlinmali", label: "Yetenek<br>Havuzu", get: (e, ev) => ev?.yetenekHavuzuAlinmali || "", render: (e, ev) => ev?.yetenekHavuzuAlinmali || "—" },
