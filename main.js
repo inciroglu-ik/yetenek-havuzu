@@ -1229,8 +1229,9 @@ function openAdminDetailDrawer(emp) {
       </div>
       <div class="drawer-body">${bodyHtml()}</div>
       <div class="drawer-foot">
+        ${isDuzenlenebilir() ? `<button class="btn btn-brass" id="editFromDetail">Değerlendirmeyi Düzenle</button>` : ""}
         <button class="btn btn-ghost" id="printKarneA4">A4 Karne Yazdır</button>
-        <button class="btn btn-brass" id="downloadPersonExcel">Excel Raporu İndir</button>
+        <button class="btn btn-ghost" id="downloadPersonExcel">Excel Raporu İndir</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -1238,6 +1239,8 @@ function openAdminDetailDrawer(emp) {
   el("#closeAdminDrawer").onclick = () => overlay.remove();
   el("#downloadPersonExcel").onclick = () => exportSinglePersonExcel(emp, ev);
   el("#printKarneA4").onclick = () => karneYazdir([emp]);
+  const _editBtn = el("#editFromDetail");
+  if (_editBtn) _editBtn.onclick = () => { overlay.remove(); openEvalDrawer(emp); };
 }
 
 // ---------------------------------------------------------------
@@ -1903,7 +1906,7 @@ function renderAdmin() {
                   box9.slice(start, start + 3).map((c, j) => `
                     <div class="g9cell" data-idx="${start + j}" style="cursor:pointer;background:${c.cell.renk};color:#fff;border-radius:8px;padding:10px 11px;min-height:132px;display:flex;flex-direction:column;gap:6px">
                       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
-                        <b style="font-size:12.5px;line-height:1.25">${c.cell.baslik}</b>
+                        <b style="font-size:12.5px;line-height:1.25">${c.cell.baslik}${["2-2", "2-1", "1-2"].includes(c.pot + "-" + c.perf) ? ` <span style="font-weight:600;opacity:.92;white-space:nowrap">(Terfiye Uygun: ${c.list.length})</span>` : ""}</b>
                         <span style="flex:none;background:rgba(255,255,255,.22);border-radius:20px;padding:1px 9px;font-weight:700;font-size:12.5px">${c.list.length}</span>
                       </div>
                       <ul style="margin:0;padding-left:15px;font-size:10.5px;line-height:1.35;opacity:.94">${c.cell.aciklama.map((a) => `<li style="margin-bottom:2px">${a}</li>`).join("")}</ul>
@@ -1989,7 +1992,7 @@ function renderAdmin() {
         <table class="admin-table" style="min-width:1050px">
           <thead><tr>
             ${ADMIN_COLUMNS.map((c) => `<th data-key="${c.key}">${c.label} <span class="sort-ind" data-key="${c.key}"></span></th>`).join("")}
-            <th>Karne</th>
+            <th>Düzenle / Karne</th>
           </tr></thead>
           <tbody id="tbody"></tbody>
         </table>
@@ -2092,13 +2095,19 @@ function renderAdmin() {
       });
     sonFiltreli = list;
 
+    const canEdit = isDuzenlenebilir();
     el("#tbody").innerHTML = list.map((e) => {
       const ev = evaluationsMap[e.id];
-      return `<tr>${ADMIN_COLUMNS.map((c) => `<td>${c.render(e, ev)}</td>`).join("")}<td><button type="button" class="link-btn karne-print" data-id="${e.id}" style="color:var(--brass);font-weight:600">A4</button></td></tr>`;
+      const duzenleBtn = canEdit ? `<button type="button" class="link-btn eval-edit" data-id="${e.id}" style="color:var(--navy);font-weight:600;margin-right:10px">Düzenle</button>` : "";
+      return `<tr>${ADMIN_COLUMNS.map((c) => `<td>${c.render(e, ev)}</td>`).join("")}<td style="white-space:nowrap">${duzenleBtn}<button type="button" class="link-btn karne-print" data-id="${e.id}" style="color:var(--brass);font-weight:600">A4</button></td></tr>`;
     }).join("") || `<tr><td colspan="${ADMIN_COLUMNS.length + 1}" class="empty-state">Kayıt bulunamadı.</td></tr>`;
 
     document.querySelectorAll(".person-link").forEach((btn) => {
       btn.addEventListener("click", () => { const emp = findEmpById(btn.dataset.id); if (emp) openAdminDetailDrawer(emp); });
+    });
+    // Admin: her personelin değerlendirme kartını düzenle (aktif dönemde)
+    document.querySelectorAll(".eval-edit").forEach((btn) => {
+      btn.addEventListener("click", () => { const emp = findEmpById(btn.dataset.id); if (emp) openEvalDrawer(emp); });
     });
     document.querySelectorAll(".karne-print").forEach((btn) => {
       btn.addEventListener("click", () => { const emp = findEmpById(btn.dataset.id); if (emp) karneYazdir([emp]); });
