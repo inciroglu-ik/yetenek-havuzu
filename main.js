@@ -253,8 +253,85 @@ const ICONS = {
   grid: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5" fill="currentColor"/><rect x="13" y="3" width="8" height="8" rx="1.5" fill="currentColor" opacity=".55"/><rect x="3" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".55"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".85"/></svg>`,
   people: `<svg width="16" height="16" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4" fill="currentColor"/><path d="M2.5 20c0-4 3-6.5 6.5-6.5s6.5 2.5 6.5 6.5" fill="currentColor" opacity=".85"/><circle cx="17.5" cy="8.5" r="2.6" fill="currentColor" opacity=".55"/><path d="M14.8 13.9c1-.6 2.1-.9 3-.9 2.8 0 5 2 5.2 5" fill="currentColor" opacity=".55"/></svg>`,
   gear: `<svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 15.4a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8Z" fill="currentColor"/><path d="M19.4 13.6l1.7-1-2-3.4-1.9.7a6.9 6.9 0 0 0-1.5-.9l-.3-2h-4l-.3 2a6.9 6.9 0 0 0-1.5.9l-1.9-.7-2 3.4 1.7 1a7 7 0 0 0 0 1.7l-1.7 1 2 3.4 1.9-.7c.4.4 1 .7 1.5.9l.3 2h4l.3-2c.5-.2 1.1-.5 1.5-.9l1.9.7 2-3.4-1.7-1a7 7 0 0 0 0-1.7Z" fill="currentColor" opacity=".55"/></svg>`,
-  progress: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="4" rx="2" fill="currentColor" opacity=".32"/><rect x="3" y="5" width="12" height="4" rx="2" fill="currentColor"/><rect x="3" y="15" width="18" height="4" rx="2" fill="currentColor" opacity=".32"/><rect x="3" y="15" width="7" height="4" rx="2" fill="currentColor" opacity=".7"/></svg>`
+  progress: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="4" rx="2" fill="currentColor" opacity=".32"/><rect x="3" y="5" width="12" height="4" rx="2" fill="currentColor"/><rect x="3" y="15" width="18" height="4" rx="2" fill="currentColor" opacity=".32"/><rect x="3" y="15" width="7" height="4" rx="2" fill="currentColor" opacity=".7"/></svg>`,
+  doc: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5" fill="currentColor" opacity=".32"/><rect x="7.5" y="7" width="9" height="2" rx="1" fill="currentColor"/><rect x="7.5" y="11" width="9" height="2" rx="1" fill="currentColor"/><rect x="7.5" y="15" width="6" height="2" rx="1" fill="currentColor"/></svg>`
 };
+
+// ---------------------------------------------------------------
+// "Açıklamalar" sekmesi — değerlendirme skalası tanımları (İK skala sunumundan; SCORE_LABELS ile aynı 1–5)
+// ---------------------------------------------------------------
+const SKALA_RENK = { 1: "var(--bad)", 2: "var(--warn)", 3: "var(--navy)", 4: "var(--good)", 5: "#1f6b43" };
+const SKALA_OZET = [
+  { v: 5, ad: "Rol Model", maddeler: ["Çok iyi gelişmiş bir uzmanlık.", "Etkisi çok yüksek bir sonuç yaratır.", "Şirketteki birçok kişiye bu konuda rol model olur."] },
+  { v: 4, ad: "Fark Yaratan", maddeler: ["Etkileyici bir bilgi ve/veya uzmanlık.", "Kriterleri aşan bir yaklaşım.", "Şirketteki birçok kişiden bu alanda iyi."] },
+  { v: 3, ad: "Yetkin", maddeler: ["Performans olarak kriterleri karşılar.", "İşi yürütecek bir performans gösterir.", "Şirketteki seviyeye denk bir performans."] },
+  { v: 2, ad: "Gelişim İhtiyacı", maddeler: ["Gelişim göstermesi gereken bir performans.", "Etkinleşmesi gereken bir yaklaşım sergiler.", "Şirkette bu alanda birçok kişi ondan daha iyi."] },
+  { v: 1, ad: "Zayıf", maddeler: ["Talep edilenin tam tersi davranışlar gösterir.", "Neredeyse bu alanda gelişemeyecek kadar aşağıda."] }
+];
+const SKALA_DETAY = [
+  { v: 1, ad: "Zayıf", maddeler: [
+    "Değerlendirilen yetkinliğin gereksinimlerini karşılayamaz.",
+    "Yetkinliğin tersine davranış gösterir.",
+    "Gelişime kapalıdır.",
+    "Geri bildirime açık değildir.",
+    "Spesifik örnekler karşısında savunmacıdır.",
+    "Hatalarından ders çıkarmaz, sorumluluk almaz, başkalarını suçlar ve bahaneler üretir."] },
+  { v: 2, ad: "Gelişim İhtiyacı", maddeler: [
+    "Değerlendirilen yetkinlik ile ilişkili davranış göstergelerinde yetersizdir.",
+    "Nadiren de olsa tersine davranışlar sergiler.",
+    "Geri bildirim alsa dahi aksiyon almakta yeterli değildir.",
+    "Süreçleri sürekli destek ve talimatla yürütür, sürekli olarak teyit ihtiyacı duyar, sıklıkla hata yapar.",
+    "İnisiyatif almak konusunda yeterli bilgi ve beceriye sahip değildir.",
+    "Emsal çalışanlara göre daha yavaştır, iş kalitesi düşüktür, kontrol ihtiyacı duyar."] },
+  { v: 3, ad: "Yetkin", maddeler: [
+    "Kendisine verilen görevleri eksiksiz şekilde yerine getirir.",
+    "İlgili yetkinlikte yer alan davranış göstergelerini karşılar.",
+    "Geri bildirime açıktır. Gerekli aksiyonları hızlıca alır.",
+    "Çalışanlarına ihtiyaçları doğrultusunda liderlik yapar.",
+    "İşini yapmak için gerekli bilgi ve beceriye sahiptir.",
+    "Gerektiği durumlarda inisiyatif alır, kendi süreçlerini hatırlatmaya gerek kalmaksızın sonuçlandırır."] },
+  { v: 4, ad: "Fark Yaratan", maddeler: [
+    "Kendisine verilen görevleri eksiksiz şekilde yerine getirmekle birlikte kendisine talimat verilmeden süreçleri iyileştirip geliştirir.",
+    "Gerekli yetkinlikler ve davranış göstergeleri ile ilgili çalışanlarını her zaman ileri taşır.",
+    "Geri bildirime açıktır. Gerekli aksiyonları hızlıca alır. Aksiyonların alınmasını sağlar ve takipçisi olur.",
+    "Çalışanlarına ihtiyaçları doğrultusunda liderlik yapar. Liderlik yapmalarını sağlar.",
+    "İşini yapmak için gerekli bilgi ve beceriye sahiptir. Bilgi ve becerisini aktarır.",
+    "Gerektiği durumlarda inisiyatif alır, ekibinin hatırlatmaya gerek kalmadan işleri sonuçlandırmasını güvence altına alır."] },
+  { v: 5, ad: "Rol Model", maddeler: [
+    "Kendisine verilen görevleri eksiksiz şekilde yerine getirmekle birlikte kendisine talimat verilmeden süreçleri iyileştirip geliştirir. Organizasyonun bütününe yaygınlaştırılması için gerekli aksiyonları alır.",
+    "Gerekli yetkinlikler ve davranış göstergeleri ile ilgili çalışanlarını her zaman ileri taşır. Her durumda aidiyeti güçlendirir.",
+    "Geri bildirime açıktır. Gerekli aksiyonları hızlıca alır. Aksiyonların alınmasını sağlar ve takipçisi olur. Aldığı aksiyonları yaygınlaştırır.",
+    "Çalışanlarına ihtiyaçları doğrultusunda liderlik yapar. Liderlik yapmalarını sağlar. Kendilerini geliştirmeleri için yüksek hedefler belirler.",
+    "İşini yapmak için gerekli bilgi ve beceriye sahiptir. Bilgi ve becerisini aktarır. Başkalarının da aktarması için olanaklar yaratır.",
+    "Her durumda inisiyatif alarak, inisiyatif alabilen liderler yetiştirilmesini sağlar."] }
+];
+function aciklamaTabHtml() {
+  const rozet = (v) => `<span class="sk-rozet" style="background:${SKALA_RENK[v]}">${v}</span>`;
+  const ozet = SKALA_OZET.map((s) => `<div class="sk-satir">
+      <div class="sk-ad">${rozet(s.v)}<span>${s.ad}</span></div>
+      <ul class="sk-madde">${s.maddeler.map((m) => `<li>${m}</li>`).join("")}</ul>
+    </div>`).join("");
+  const detay = SKALA_DETAY.map((s) => `<div class="sk-seviye">
+      <div class="sk-seviye-bas">${rozet(s.v)}<span>Değerlendirme Skalası — ${s.ad}</span></div>
+      <div class="sk-barlar">${s.maddeler.map((m) => `<div class="sk-bar">${m}</div>`).join("")}</div>
+    </div>`).join("");
+  return `<div id="tabAciklama" style="display:none">
+    <div class="sk-wrap">
+      <section class="sk-kart">
+        <div class="sk-ust">Puanlama</div>
+        <h2>Değerlendirme Skalası (1–5)</h2>
+        <p class="sk-not">Potansiyel yetkinlikleri 1–5 arasında puanlanır. Her puanın anlamı aşağıdadır.</p>
+        ${ozet}
+      </section>
+      <section class="sk-kart">
+        <div class="sk-ust">Davranış Göstergeleri</div>
+        <h2>Seviyelere Göre Skala Açıklamaları</h2>
+        <p class="sk-not">Her seviyede çalışandan beklenen davranışlar.</p>
+        ${detay}
+      </section>
+    </div>
+  </div>`;
+}
 
 function sidebarHtml(items, activeKey) {
   return `<div class="sidebar">
@@ -1747,7 +1824,8 @@ function renderAdmin() {
       { key: "overview", icon: ICONS.grid, label: "Genel Bakış" },
       { key: "list", icon: ICONS.people, label: "Personel Listesi" },
       { key: "tamamlama", icon: ICONS.progress, label: "Tamamlama Oranları" },
-      { key: "manage", icon: ICONS.gear, label: "Yönetim" }
+      { key: "manage", icon: ICONS.gear, label: "Yönetim" },
+      { key: "aciklama", icon: ICONS.doc, label: "Açıklamalar" }
     ], "overview")}
     <div class="main-content">
     <div class="wrap wide">
@@ -1899,6 +1977,7 @@ function renderAdmin() {
       </div>
     </div>
     ${tamamlamaTabHtml(compData)}
+    ${aciklamaTabHtml()}
     </div>
     </div>
   </div>`;
@@ -1941,6 +2020,7 @@ function renderAdmin() {
       el("#tabOverview").style.display = key === "overview" ? "" : "none";
       el("#tabList").style.display = key === "list" ? "" : "none";
       const tt = el("#tabTamamlama"); if (tt) tt.style.display = key === "tamamlama" ? "" : "none";
+      const ta = el("#tabAciklama"); if (ta) ta.style.display = key === "aciklama" ? "" : "none";
     });
   });
 
