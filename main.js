@@ -254,6 +254,7 @@ const ICONS = {
   people: `<svg width="16" height="16" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4" fill="currentColor"/><path d="M2.5 20c0-4 3-6.5 6.5-6.5s6.5 2.5 6.5 6.5" fill="currentColor" opacity=".85"/><circle cx="17.5" cy="8.5" r="2.6" fill="currentColor" opacity=".55"/><path d="M14.8 13.9c1-.6 2.1-.9 3-.9 2.8 0 5 2 5.2 5" fill="currentColor" opacity=".55"/></svg>`,
   gear: `<svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 15.4a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8Z" fill="currentColor"/><path d="M19.4 13.6l1.7-1-2-3.4-1.9.7a6.9 6.9 0 0 0-1.5-.9l-.3-2h-4l-.3 2a6.9 6.9 0 0 0-1.5.9l-1.9-.7-2 3.4 1.7 1a7 7 0 0 0 0 1.7l-1.7 1 2 3.4 1.9-.7c.4.4 1 .7 1.5.9l.3 2h4l.3-2c.5-.2 1.1-.5 1.5-.9l1.9.7 2-3.4-1.7-1a7 7 0 0 0 0-1.7Z" fill="currentColor" opacity=".55"/></svg>`,
   progress: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="4" rx="2" fill="currentColor" opacity=".32"/><rect x="3" y="5" width="12" height="4" rx="2" fill="currentColor"/><rect x="3" y="15" width="18" height="4" rx="2" fill="currentColor" opacity=".32"/><rect x="3" y="15" width="7" height="4" rx="2" fill="currentColor" opacity=".7"/></svg>`,
+  matris: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="5" rx="1" fill="currentColor" opacity=".45"/><rect x="9.5" y="3" width="5" height="5" rx="1" fill="currentColor" opacity=".7"/><rect x="16" y="3" width="5" height="5" rx="1" fill="currentColor"/><rect x="3" y="9.5" width="5" height="5" rx="1" fill="currentColor" opacity=".3"/><rect x="9.5" y="9.5" width="5" height="5" rx="1" fill="currentColor" opacity=".55"/><rect x="16" y="9.5" width="5" height="5" rx="1" fill="currentColor" opacity=".7"/><rect x="3" y="16" width="5" height="5" rx="1" fill="currentColor" opacity=".2"/><rect x="9.5" y="16" width="5" height="5" rx="1" fill="currentColor" opacity=".3"/><rect x="16" y="16" width="5" height="5" rx="1" fill="currentColor" opacity=".45"/></svg>`,
   doc: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5" fill="currentColor" opacity=".32"/><rect x="7.5" y="7" width="9" height="2" rx="1" fill="currentColor"/><rect x="7.5" y="11" width="9" height="2" rx="1" fill="currentColor"/><rect x="7.5" y="15" width="6" height="2" rx="1" fill="currentColor"/></svg>`
 };
 
@@ -349,6 +350,9 @@ let allEvalsMap = {};      // docId -> evaluation doc (tüm dönemler)
 let evaluationsMap = {};   // employeeId -> GÜNCEL (taze) değerlendirme
 let arsivMap = {};         // employeeId -> ARŞİV (eski/içe aktarılan) değerlendirme — sadece admin
 let tazeMap = {};          // employeeId -> yalnız müdürlerin girdiği taze değerlendirme (arşiv hariç) — admin Genel Bakış sayıları
+// Admin ekran durumu: sekme + liste filtreleri veri yenilense (onSnapshot → render) de korunur
+function admBosFiltre() { return { q: "", mgr: "", dept: "", durum: "", risk: "", ready: "", havuz: "", oneri: "", lider: "", grid: "", gecis: "" }; }
+const ADM = { tab: "overview", f: admBosFiltre(), gelismis: false, sort: { key: "adSoyad", dir: 1 }, kaynak: "guncel" };
 let unsubEval = null;
 let unsubEmp = null;
 
@@ -387,7 +391,6 @@ function evalArsivMi(ev) {
 function rebuildEvalMap() {
   evaluationsMap = {};
   arsivMap = {};
-  const admin = currentProfile && currentProfile.isAdmin;
   const nameToId = {};
   employeesCache.forEach((e) => { if (e.adSoyad) nameToId[nameKey(e.adSoyad)] = e.id; });
   tazeMap = {};
@@ -399,14 +402,16 @@ function rebuildEvalMap() {
       if (!c || evalDahaYeni(ev, c)) arsivMap[key] = ev;
       return;
     }
+    // Güncel sayılar yalnız görüntülenen dönemin kaydından (başka dönemin kaydı "güncel" sayılmaz)
+    if (ev.donem && viewDonem && ev.donem !== viewDonem) return;
     const cur = tazeMap[key];
     if (!cur || evalDahaYeni(ev, cur)) tazeMap[key] = ev;
   });
-  // MÜDÜR: yalnız taze kayıtlar (arşivi görmez, sıfırdan doldurur).
-  // ADMIN: taze kayıt HER ZAMAN öncelikli; tazesi olmayan kişide arşiv görünür (listede görebilir + filtreleyebilir).
-  // (Eskiden tarihi daha yeni olan arşiv, müdürün taze değerlendirmesini admin ekranında gizleyebiliyordu.)
+  // HERKES (müdür + admin): evaluationsMap = YALNIZ taze kayıtlar. Arşiv ("İlk Değerlendirme", Excel matrisi)
+  // güncel veriye HİÇBİR yerde karışmaz; admin arşivi ayrıca görür: Personel listesinde "Kaynak: İlk değerlendirme
+  // (arşiv)" seçimi, kişi kartı ve karnede "İlk Değerlendirme (Arşiv)" bölümü (arsivMap).
+  // (09.11: admin'de arşiv tazesi olmayan kişide güncel gibi görünüyordu → listede risk 4, tabloda 3 çelişkisi.)
   Object.assign(evaluationsMap, tazeMap);
-  if (admin) Object.keys(arsivMap).forEach((k) => { if (!evaluationsMap[k]) evaluationsMap[k] = arsivMap[k]; });
 }
 
 // Düzenleme yapılabilir mi? (sadece aktif dönem düzenlenebilir)
@@ -1500,7 +1505,7 @@ function tcRozet(id, tamamMetin) {
 // Müdür + direktör tamamlama verisini employeesCache + evaluationsMap'ten üretir.
 function buildCompletionData() {
   const emps = employeesCache;
-  const isDone = (e) => evaluationsMap[e.id]?.status === "tamamlandi";
+  const isDone = (e) => tazeMap[e.id]?.status === "tamamlandi";
   const empByName = {};
   emps.forEach((e) => { if (e.adSoyad) empByName[nameKey(e.adSoyad)] = e; });
 
@@ -1737,8 +1742,11 @@ async function downloadExecutivePdf(ctx) {
 // ADMIN VIEW
 // ---------------------------------------------------------------
 function statusBadgeHtml(ev, emp) {
-  if (emp && kidemDisi(emp)) return `<span class="status-badge" style="background:#eef0f4;color:#6b7280">Değerlendirme Dışı</span>`;
-  const st = ["tamamlandi", "taslak"].includes(ev?.status) ? ev.status : "bekliyor";
+  if (ev && evalArsivMi(ev)) return `<span class="status-badge status-arsiv" title="İlk değerlendirme turundan (Excel matrisi) arşiv kaydı — güncel değerlendirme değildir">Arşiv</span>`;
+  // Sıra Genel Bakış (durumOf) ile aynı: önce girilmiş taze durum, sonra 6 ay altı kıdem
+  const dolu = ["tamamlandi", "taslak"].includes(ev?.status);
+  if (!dolu && emp && kidemDisi(emp)) return `<span class="status-badge" style="background:#eef0f4;color:#6b7280">Değerlendirme Dışı</span>`;
+  const st = dolu ? ev.status : "bekliyor";
   const l = st === "tamamlandi" ? "Tamamlandı" : st === "taslak" ? "Taslak" : "Bekliyor";
   return `<span class="status-badge status-${st}">${l}</span>`;
 }
@@ -1748,7 +1756,7 @@ const ADMIN_COLUMNS = [
   { key: "bolum", label: "Bölüm", get: (e, ev) => e.bolum || "", render: (e, ev) => escH(e.bolum || "") },
   { key: "kidem", label: "Kıdem", get: (e, ev) => (e.kurumKidemiYil ?? -1), render: (e, ev) => formatKidem(e.kurumKidemiYil) },
   { key: "gridKod", label: "9-Grid", get: (e, ev) => { const p = ev && gridPos(ev); return p ? (3 - p.pot) * 10 + (p.perf + 1) : -1; }, render: (e, ev) => { const p = ev && gridPos(ev); return p ? `<b>${gridKoord(p)}</b>` : "—"; } },
-  { key: "status", label: "Durum", get: (e, ev) => kidemDisi(e) ? "dışı" : (ev?.status || "bekliyor"), render: (e, ev) => statusBadgeHtml(ev, e) },
+  { key: "status", label: "Durum", get: (e, ev) => (["tamamlandi", "taslak"].includes(ev?.status) ? ev.status : (kidemDisi(e) ? "dışı" : "bekliyor")), render: (e, ev) => statusBadgeHtml(ev, e) },
   { key: "ortalamaPotansiyel", label: "Ort.<br>Potansiyel", get: (e, ev) => (ev?.ortalamaPotansiyel ?? -1), render: (e, ev) => escH(ev?.ortalamaPotansiyel ?? "—") },
   { key: "performansSinifi", label: "Performans<br>Sınıfı", get: (e, ev) => ev?.performansSinifi || "", render: (e, ev) => `<span style="font-size:10px">${escH(ev?.performansSinifi || "—")}</span>` },
   { key: "yetenekHavuzuAlinmali", label: "Yetenek<br>Havuzu", get: (e, ev) => ev?.yetenekHavuzuAlinmali || "", render: (e, ev) => escH(ev?.yetenekHavuzuAlinmali || "—") },
@@ -1763,7 +1771,7 @@ function renderAdmin() {
   const roster = adminRoster();
   const total = roster.length;
   // GENEL BAKIŞ sayıları YALNIZ bugünkü personelin müdürlerce girilen (taze) değerlendirmelerinden gelir:
-  // Mayıs/Otokoç arşivi ve işten ayrılanların kayıtları kart, oran ve grafiklere girmez
+  // İlk değerlendirme arşivi (Excel matrisi) ve işten ayrılanların kayıtları kart, oran ve grafiklere girmez
   // (Personel Listesi ve karnede görünmeye devam eder). Risk/havuz/liderlik/9-Grid = yalnız TAMAMLANANLAR.
   const tazeDurum = (e) => tazeMap[e.id]?.status;
   const tamamEv = (e) => (tazeDurum(e) === "tamamlandi" ? tazeMap[e.id] : null);
@@ -1796,7 +1804,7 @@ function renderAdmin() {
     { label: "Bekliyor", value: bekliyor, color: "#9aa2ad" }
   ];
 
-  // --- VERİ KAPSAMLARI (yalnız bugünkü personel): tamamlanan · taslaklar dahil · Mayıs/Otokoç arşivi ---
+  // --- VERİ KAPSAMLARI (yalnız bugünkü personel): tamamlanan · taslaklar dahil · ilk değerlendirme arşivi ---
   const taslakEvler = roster.map((e) => (tazeDurum(e) === "taslak" ? tazeMap[e.id] : null)).filter(Boolean);
   const taslakDahil = tamamlananlar.concat(taslakEvler);
   const arsivEvler = roster.map((e) => arsivMap[e.id]).filter(Boolean);
@@ -1812,7 +1820,7 @@ function renderAdmin() {
       <div class="ck-alt">${aciklama} · <b>${L.length}</b> kayıt${L.length !== girilen ? ` (${L.length - girilen} kayıtta risk girilmemiş)` : ""}</div>
       ${L.length ? donutChart(riskSegsOf(L)) : `<div class="ck-bos">Bu kapsamda kayıt yok.</div>`}</div>`;
   };
-  const kapsamlar = [["Tamamlanan", tamamlananlar], ["Taslak dahil", taslakDahil], ["Arşiv", arsivEvler]];
+  const kapsamlar = [["Tamamlanan", tamamlananlar], ["Taslak dahil", taslakDahil], ["İlk değ. (arşiv)", arsivEvler]];
   const olculer = [
     ["Kayıt", (L) => L.length],
     ["Havuza alınmalı", (L) => L.filter((ev) => ev.yetenekHavuzuAlinmali === "Evet").length],
@@ -1848,66 +1856,134 @@ function renderAdmin() {
   const summaryCtx = { total, done, draft, disi, bekliyor, havuzEvet, liderlikVar, fonksiyonelEvet, deptData, box9, kritikRisk, evaluationsMap };
   const compData = buildCompletionData();
 
+  // --- tazelik: son değerlendirme girişi ---
+  const sonMs = Object.values(tazeMap).reduce((m, ev) => { const t = ev.updatedAt && ev.updatedAt.toMillis ? ev.updatedAt.toMillis() : 0; return t > m ? t : m; }, 0);
+  const sonGun = sonMs ? Math.floor((Date.now() - sonMs) / 864e5) : null;
+  const sonTarihMetni = sonMs ? new Date(sonMs).toLocaleDateString("tr-TR") : "—";
+  const degerlendirilebilir = total - disi;
+  const oranTamam = degerlendirilebilir ? Math.round(done / degerlendirilebilir * 100) : 0;
+  const durumOf = (e) => { const s = tazeDurum(e); if (s === "tamamlandi" || s === "taslak") return s; return kidemDisi(e) ? "disi" : "bekliyor"; };
+  const durumSay = { "": roster.length, tamamlandi: 0, taslak: 0, bekliyor: 0, disi: 0 };
+  roster.forEach((e) => { durumSay[durumOf(e)]++; });
+
+  // --- müdürlere göre ilerleme (en çok bekleyen üstte) ---
+  const mgrIlerleme = compData.mgrs.filter((m) => m.total > 0)
+    .map((m) => ({ ...m, bekleyen: m.total - m.doneCount }))
+    .sort((a, b) => b.bekleyen - a.bekleyen || (a.rate ?? 0) - (b.rate ?? 0));
+  const mgrSatir = (m) => {
+    const p = Math.round((m.rate || 0) * 100);
+    const renk = p >= 100 ? "var(--good)" : p > 0 ? "var(--warn)" : "var(--bad)";
+    return `<button type="button" class="mgr-row" data-mgr="${escH(m.name)}" title="${escH(m.name)} ekibini listede aç">
+      <span class="mr-ad">${escH(m.name)}<small>${escH(m.dept || "")}</small></span>
+      <span class="mr-bar"><i style="width:${p}%;background:${renk}"></i></span>
+      <span class="mr-say"><b>${m.doneCount}</b>/${m.total}</span>
+      <span class="mr-bek ${m.bekleyen ? "" : "ok"}">${m.bekleyen ? m.bekleyen + " bekliyor" : "Tamam"}</span>
+    </button>`;
+  };
+  const baslamayanMudur = mgrIlerleme.filter((m) => m.doneCount === 0).length;
+
+  // --- kompakt 9-Grid ısı haritası ---
+  const hmHucre = (c, idx) => `<button type="button" class="hm-cell" data-idx="${idx}" style="--c:${c.cell.renk};--a:${c.list.length ? Math.min(1, 0.35 + c.list.length / Math.max(1, yerlesenSayi) * 2.2) : 0.12}" title="${escH(c.cell.baslik)} · ${escH(POT_ETIKET[c.pot])} / ${escH(PERF_ETIKET[c.perf])}">
+      <span class="hm-n">${c.list.length}</span><span class="hm-t">${escH(c.cell.baslik)}</span></button>`;
+
+  // --- yetenek göstergeleri (yalnız tamamlananlar) ---
+  const miniKpi = (id, n, l, alt, cls) => `<button type="button" class="mini-kpi ${cls || ""}" id="${id}"><span class="mk-n">${n}</span><span class="mk-l">${l}</span><span class="mk-a">${alt}</span></button>`;
+  const yuzde = (n) => (done ? Math.round(n / done * 100) : 0);
+
+  const NAV = [
+    { key: "overview", icon: ICONS.grid, label: "Genel Bakış" },
+    { key: "list", icon: ICONS.people, label: "Personel" },
+    { key: "grid", icon: ICONS.matris, label: "Yetenek Matrisi" },
+    { key: "tamamlama", icon: ICONS.progress, label: "Tamamlama Oranları" },
+    { key: "manage", icon: ICONS.gear, label: "Yönetim" },
+    { key: "aciklama", icon: ICONS.doc, label: "Açıklamalar" }
+  ];
+  if (!NAV.some((n) => n.key === ADM.tab) || ADM.tab === "manage") ADM.tab = "overview";
+  const F = ADM.f;
+  const gelismisSay = ["risk", "ready", "havuz", "oneri", "lider", "grid", "gecis"].filter((k) => F[k]).length;
+
   root().innerHTML = `
   ${topbar()}
   <div class="app-body">
-    ${sidebarHtml([
-      { key: "overview", icon: ICONS.grid, label: "Genel Bakış" },
-      { key: "list", icon: ICONS.people, label: "Personel Listesi" },
-      { key: "tamamlama", icon: ICONS.progress, label: "Tamamlama Oranları" },
-      { key: "manage", icon: ICONS.gear, label: "Yönetim" },
-      { key: "aciklama", icon: ICONS.doc, label: "Açıklamalar" }
-    ], "overview")}
+    ${sidebarHtml(NAV, ADM.tab)}
     <div class="main-content">
     <div class="wrap wide">
     <div class="page-head">
       <div>
         <h1>İK Değerlendirme Paneli</h1>
-        <p>Tüm müdürlerden gelen yetenek havuzu değerlendirmelerini canlı olarak izleyin.</p>
+        <p>${escH(viewDonem)} dönemi · ${total} çalışan · Son değerlendirme girişi <b>${sonTarihMetni}</b>${sonGun != null ? ` (${sonGun === 0 ? "bugün" : sonGun + " gün önce"})` : ""}</p>
       </div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-ghost btn-sm" id="printSummary">Yönetici PDF Raporu İndir</button>
-        <button class="btn btn-ghost btn-sm" id="exportCsv">CSV İndir</button>
-        <button class="btn btn-ghost btn-sm" id="exportSunum" title="Yönetim sunumu için güncel verileri tek dosyada indirir">Sunum Verisi İndir</button>
+      <div class="dd">
+        <button class="btn btn-ghost btn-sm" id="ddBtn" type="button" aria-haspopup="true" aria-expanded="false">Dışa Aktar ▾</button>
+        <div class="dd-menu" id="ddMenu" hidden>
+          <button type="button" id="printSummary">Yönetici PDF raporu</button>
+          <button type="button" id="exportCsv">CSV (tüm personel)</button>
+          <button type="button" id="exportSunum" title="Yönetim sunumu için güncel verileri tek dosyada indirir">Sunum verisi (JSON)</button>
+        </div>
       </div>
-    </div>
-    <div class="stat-row">
-      <div class="stat-card"><div class="n">${total}</div><div class="l">Toplam Personel</div></div>
-      <div class="stat-card" title="İşe başlama tarihine göre kıdemi 6 aydan kısa olan çalışanlar değerlendirme dışıdır; Bekliyor sayısına dahil edilmez."><div class="n">${disi}</div><div class="l">Kişi Değerlendirme Dışı (6 Ay Altı Kıdem)</div></div>
-      <div class="stat-card"><div class="n">${done}</div><div class="l">Tamamlandı</div></div>
-      <div class="stat-card"><div class="n">${draft}</div><div class="l">Taslak</div></div>
-      <div class="stat-card"><div class="n">${bekliyor}</div><div class="l">Bekliyor</div></div>
-    </div>
-    <div class="stat-row">
-      <div class="stat-card" id="statHavuz" style="cursor:pointer"><div class="n">${havuzEvet}</div><div class="l">Yetenek Havuzuna Alınmalı (Evet)</div></div>
-      <div class="stat-card" id="statLiderlik" style="cursor:pointer"><div class="n">${liderlikVar}</div><div class="l">Liderlik Potansiyeli (Var)</div></div>
-      <div class="stat-card" id="statFonksiyonel" style="cursor:pointer"><div class="n">${fonksiyonelEvet}</div><div class="l">Fonksiyonel Geçişe Uygun (Evet)</div></div>
     </div>
     ${!isDuzenlenebilir() ? `<div class="error-box" style="display:block;background:var(--warn-bg);color:var(--warn)"><b>${viewDonem}</b> dönemi görüntüleniyor (salt okunur, geçmiş kayıtlar). Güncel dönem için sağ üstten <b>${aktifDonem} (Aktif)</b> seçin.</div>` : ""}
     ${(isDuzenlenebilir() && noManager) ? `<div class="error-box" style="display:block;background:var(--warn-bg);color:var(--warn)">${noManager} personelin müdürü eşleşmedi. "Yönetim" menüsünden atayabilirsiniz.</div>` : ""}
 
-    <div id="tabOverview">
-      <div class="chart-grid ilk">
-        <div class="chart-card">
-          <h3>Departman Dağılımı</h3>
-          ${barListHtml(deptData)}
-        </div>
-        <div class="chart-card">
-          <h3>Değerlendirme Tamamlanma Durumu</h3>
-          ${donutChart(completionSegs)}
-        </div>
-        <div class="chart-card">
-          <h3>Kapsam Karşılaştırması</h3>
-          ${kapsamTablo}
-        </div>
+    <div id="tabOverview" class="sekme">
+      <div class="kpi-serit">
+        <button type="button" class="kpi" data-durum=""><span class="kpi-l">Toplam Personel</span><span class="kpi-n">${total}</span><span class="kpi-a">${degerlendirilebilir} kişi değerlendirilebilir</span></button>
+        <button type="button" class="kpi" data-durum="disi" title="İşe başlama tarihine göre kıdemi 6 aydan kısa olan çalışanlar değerlendirme dışıdır; Bekliyor sayısına dahil edilmez."><span class="kpi-l">Kişi Değerlendirme Dışı (6 Ay Altı Kıdem)</span><span class="kpi-n">${disi}</span><span class="kpi-a">Kıdemi 6 ayı doldurunca açılır</span></button>
+        <button type="button" class="kpi vurgu" data-durum="tamamlandi"><span class="kpi-l">Tamamlandı</span><span class="kpi-n">${done}<small>%${oranTamam}</small></span><span class="kpi-bar"><i style="width:${oranTamam}%"></i></span><span class="kpi-a">${degerlendirilebilir} değerlendirilebilir kişiden</span></button>
+        <button type="button" class="kpi" data-durum="taslak"><span class="kpi-l">Taslak</span><span class="kpi-n">${draft}</span><span class="kpi-a">Kaydedildi, tamamlanmadı</span></button>
+        <button type="button" class="kpi ${bekliyor ? "dikkat" : ""}" data-durum="bekliyor"><span class="kpi-l">Bekliyor</span><span class="kpi-n">${bekliyor}</span><span class="kpi-a">Henüz değerlendirilmedi</span></button>
+        <div class="kpi bilgi ${sonGun != null && sonGun > 14 ? "dikkat" : ""}"><span class="kpi-l">Son Değerlendirme</span><span class="kpi-n kucuk">${sonTarihMetni}</span><span class="kpi-a">${sonGun == null ? "Henüz giriş yok" : sonGun > 14 ? sonGun + " gündür yeni giriş yok" : sonGun + " gün önce"}</span></div>
       </div>
+
+      <div class="ov-grid">
+        <section class="pnl span8">
+          <div class="pnl-h"><div><h3>Müdürlere Göre İlerleme</h3><p>En çok bekleyen ekip üstte · ${mgrIlerleme.length} müdürden <b>${baslamayanMudur}</b>'i hiç başlamadı · satıra tıklayınca o ekip açılır</p></div><button type="button" class="pnl-link" data-git="tamamlama">Tüm müdür ve direktörler →</button></div>
+          <div class="mgr-list">${mgrIlerleme.slice(0, 9).map(mgrSatir).join("") || `<div class="bos-not">Müdür kaydı yok.</div>`}</div>
+        </section>
+        <section class="pnl span4">
+          <div class="pnl-h"><div><h3>Değerlendirme Durumu</h3><p>Değerlendirilebilir ${degerlendirilebilir} kişi (6 ay altı hariç)</p></div></div>
+          ${donutChart(completionSegs)}
+        </section>
+
+        <section class="pnl span6">
+          <div class="pnl-h"><div><h3>Yetenek Matrisi (9-Grid)</h3><p>Tamamlanan ${yerlesenSayi} kişi · kutuya tıklayınca kişiler açılır</p></div><button type="button" class="pnl-link" data-git="grid">Ayrıntılı matris →</button></div>
+          <div class="hm-wrap">
+            <div class="hm-y">Liderlik potansiyeli →</div>
+            <div class="hm-grid">
+              ${[0, 3, 6].map((s) => `<div class="hm-rl">${POT_ETIKET[box9[s].pot]}</div>` + box9.slice(s, s + 3).map((c, j) => hmHucre(c, s + j)).join("")).join("")}
+              <div></div><div class="hm-cl">Düşük</div><div class="hm-cl">Normal</div><div class="hm-cl">Yüksek</div>
+            </div>
+          </div>
+          <div class="hm-x">Performans →</div>
+        </section>
+        <section class="pnl span6">
+          <div class="pnl-h"><div><h3>Yetenek Göstergeleri</h3><p>Yalnız tamamlanan ${done} değerlendirme · kutuya tıklayınca kişiler açılır</p></div></div>
+          <div class="mini-grid">
+            ${miniKpi("statHavuz", havuzEvet, "Havuza alınmalı", "%" + yuzde(havuzEvet) + " · yönetici önerisi")}
+            ${miniKpi("statLiderlik", liderlikVar, "Liderlik potansiyeli", "%" + yuzde(liderlikVar) + " · var")}
+            ${miniKpi("statFonksiyonel", fonksiyonelEvet, "Fonksiyonel geçişe uygun", "%" + yuzde(fonksiyonelEvet) + " · evet")}
+            ${miniKpi("statKritik", kritikRisk.length, "Kritik risk", "Havuzda + ayrılma riski yüksek", kritikRisk.length ? "kirmizi" : "")}
+          </div>
+          <div class="kr-list" id="kritikRiskList">
+            ${kritikRisk.length ? kritikRisk.slice(0, 4).map((e) => `<button type="button" class="kr-row risk-alert-card" data-id="${escH(e.id)}">${avatarHtml(e.adSoyad, 28)}<span><b>${escH(e.adSoyad)}</b><small>${escH(e.mevcutUnvan || "")} · ${escH(e.departman || "")}</small></span><em>Yüksek risk</em></button>`).join("") + (kritikRisk.length > 4 ? `<div class="bos-not">+${kritikRisk.length - 4} kişi daha — "Kritik risk" kutusuna tıklayın</div>` : "") : `<div class="bos-not">Havuzda olup ayrılma riski yüksek kişi yok.</div>`}
+          </div>
+        </section>
+      </div>
+
       <div class="ck-bolum">Ayrılma Riski · Veri Kapsamına Göre</div>
       <div class="chart-grid uc">
         ${riskKart("Tamamlanan (Taslaklar Hariç)", "Müdürlerin tamamladığı değerlendirmeler", tamamlananlar)}
         ${riskKart("Taslaklar Dahil", "Tamamlanan + kaydedilmiş taslaklar", taslakDahil)}
-        ${riskKart("Arşiv (Mayıs / Otokoç)", "İlk etap ön değerlendirmeleri", arsivEvler)}
+        ${riskKart("İlk Değerlendirme (Arşiv)", "İlk tur Excel matrisinden aktarılan, güncel sayılara dahil değil", arsivEvler)}
       </div>
 
+      <div class="ov-grid">
+        <section class="pnl span6"><div class="pnl-h"><div><h3>Departman Dağılımı</h3><p>Bugünkü personel</p></div></div>${barListHtml(deptData)}</section>
+        <section class="pnl span6"><div class="pnl-h"><div><h3>Kapsam Karşılaştırması</h3><p>Aynı kişiler, üç farklı veri kapsamında</p></div></div>${kapsamTablo}</section>
+      </div>
+    </div>
+
+    <div id="tabGrid" class="sekme">
       <div class="box9-wrap">
         <h3 style="margin:0 0 4px">9-Grid · İnsanlar Üzerine Değerlendirme</h3>
         <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft)">Değerlendirmesi tamamlanan <b>${yerlesenSayi}</b> personel, <b>Performans</b> (T–AH bloğu · Düşük/Orta/Yüksek) ve <b>Liderlik Potansiyeli</b> (Potansiyel yetkinlikleri %60 + Öğrenme Çevikliği %40) puanlarına göre otomatik yerleştirilir. Her kutunun açıklaması, o gruba <i>neden</i> dahil olunduğunu anlatır — kılavuz niteliğindedir. Kutuya tıklayınca kişiler listelenir.</p>
@@ -1936,72 +2012,35 @@ function renderAdmin() {
           </div>
         </div>
       </div>
-
-      <div class="admin-panel">
-        <div class="section-title" style="margin-top:0">Kritik Risk — Havuzda ve Ayrılma Riski Yüksek Olan Personel</div>
-        <div id="kritikRiskList">
-          ${kritikRisk.length ? kritikRisk.map((e) => `
-            <div class="risk-alert-card" data-id="${escH(e.id)}" style="cursor:pointer">
-              <div style="display:flex;align-items:center;gap:12px;">
-                ${avatarHtml(e.adSoyad, 34)}
-                <div class="main">
-                  <b>${escH(e.adSoyad)}</b>
-                  <div class="meta">${escH(e.mevcutUnvan || "")} · ${escH(e.departman || "")} / ${escH(e.bolum || "")} · Müdür: ${escH(e.muduluk || "Atanmadı")}</div>
-                </div>
-              </div>
-              <span class="status-badge" style="background:var(--bad-bg);color:var(--bad)">Ayrılma Riski Yüksek</span>
-            </div>`).join("") : `<p style="font-size:13px;color:var(--ink-soft);margin:0">Şu anda yetenek havuzunda ve ayrılma riski yüksek olarak işaretlenmiş personel bulunmuyor.</p>`}
-        </div>
-      </div>
     </div>
 
-    <div id="tabList" style="display:none">
+    <div id="tabList" class="sekme">
+      <div class="kaynak-sec" role="tablist" aria-label="Veri kaynağı">
+        <button type="button" role="tab" data-kaynak="guncel" class="${ADM.kaynak === "guncel" ? "on" : ""}">Güncel değerlendirmeler</button>
+        <button type="button" role="tab" data-kaynak="arsiv" class="${ADM.kaynak === "arsiv" ? "on" : ""}">İlk değerlendirme (arşiv) · ${arsivEvler.length} kişi</button>
+      </div>
+      ${ADM.kaynak === "arsiv" ? `<div class="arsiv-not">Bu görünüm, ilk tur Excel matrisinden aktarılan <b>arşiv</b> kayıtlarını gösterir (bugün çalışan ${arsivEvler.length} kişi). Güncel sayılara, grafiklere ve tamamlama oranlarına <b>dahil değildir</b>.</div>` : ""}
+      <div class="chip-row" id="durumCipler" ${ADM.kaynak === "arsiv" ? "hidden" : ""}>
+        ${[["", "Tümü"], ["tamamlandi", "Tamamlandı"], ["taslak", "Taslak"], ["bekliyor", "Bekliyor"], ["disi", "Değerlendirme dışı"]].map(([k, l]) => `<button type="button" class="chip ${F.durum === k ? "on" : ""}" data-durum="${k}">${l}<b>${durumSay[k]}</b></button>`).join("")}
+      </div>
       <div class="toolbar">
-        <input type="text" id="searchBox" placeholder="İsimle ara…" style="min-width:200px">
-        <select id="managerFilter"><option value="">Tüm Müdürler</option>${managers.map((m) => `<option value="${escH(m)}">${escH(m)}</option>`).join("")}</select>
-        <select id="deptFilter"><option value="">Tüm Departmanlar</option>${depts.map((m) => `<option value="${escH(m)}">${escH(m)}</option>`).join("")}</select>
-        <select id="statusFilter">
-          <option value="">Tüm Durumlar</option>
-          <option value="tamamlandi">Tamamlandı</option>
-          <option value="taslak">Taslak</option>
-          <option value="bekliyor">Bekliyor</option>
-        </select>
-        <select id="riskFilter">
-          <option value="">Tüm Ayrılma Riskleri</option>
-          <option value="Düşük">Düşük</option>
-          <option value="Orta">Orta</option>
-          <option value="Yüksek">Yüksek</option>
-        </select>
-        <select id="readyFilter">
-          <option value="">Tüm Hazır Olma Süreleri</option>
-          <option value="Hazır">Hazır</option>
-          <option value="0-1 yıl">0-1 yıl</option>
-          <option value="1-2 Yıl">1-2 Yıl</option>
-        </select>
-        <select id="havuzFilter">
-          <option value="">Yetenek Havuzu (Yönetici) — Hepsi</option>
-          <option value="Evet">Havuza: Evet</option>
-          <option value="Hayır">Havuza: Hayır</option>
-        </select>
-        <select id="oneriFilter">
-          <option value="">Sistem Önerisi — Hepsi</option>
-          <option value="Evet">Öneri: Evet</option>
-          <option value="Hayır">Öneri: Hayır</option>
-        </select>
-        <select id="liderlikFilter">
-          <option value="">Liderlik — Hepsi</option>
-          <option value="Var">Liderlik: Var</option>
-          <option value="Yok">Liderlik: Yok</option>
-        </select>
-        <select id="gridFilter">
-          <option value="">9-Grid — Hepsi</option>
-          ${Object.keys(GRID9).map((k) => { const pt = Number(k.split("-")[0]), pf = Number(k.split("-")[1]); return `<option value="${k}">${(3 - pt)}-${(pf + 1)} · ${GRID9[k].baslik}</option>`; }).join("")}
-        </select>
-        <select id="gecisFilter" title="Fonksiyonel geçiş yapabileceği pozisyon">
-          <option value="">Geçiş Pozisyonu — Hepsi</option>
-          ${tumUnvanlar().map((u) => `<option value="${escH(u)}">${escH(u)}</option>`).join("")}
-        </select>
-        <button class="btn btn-brass btn-sm" id="topluKarneBtn">Listeyi A4 Karne Yazdır</button>
+        <input type="text" id="searchBox" placeholder="İsimle ara…" style="min-width:220px" value="${escH(F.q)}">
+        <select id="managerFilter"><option value="">Tüm Müdürler</option>${managers.map((m) => `<option value="${escH(m)}"${F.mgr === m ? " selected" : ""}>${escH(m)}</option>`).join("")}</select>
+        <select id="deptFilter"><option value="">Tüm Departmanlar</option>${depts.map((m) => `<option value="${escH(m)}"${F.dept === m ? " selected" : ""}>${escH(m)}</option>`).join("")}</select>
+        <button type="button" class="btn btn-ghost btn-sm" id="gelismisBtn" aria-expanded="${ADM.gelismis ? "true" : "false"}">Gelişmiş filtreler${gelismisSay ? ` <span class="rozet">${gelismisSay}</span>` : ""} ▾</button>
+        <button type="button" class="link-btn" id="filtreTemizle">Filtreleri temizle</button>
+        <span class="tb-bosluk"></span>
+        <span class="sonuc-say" id="sonucSay"></span>
+        ${ADM.kaynak === "arsiv" ? "" : `<button class="btn btn-brass btn-sm" id="topluKarneBtn" type="button">Listeyi A4 Karne Yazdır</button>`}
+      </div>
+      <div class="toolbar gelismis" id="gelismisAlan" ${ADM.gelismis ? "" : "hidden"}>
+        <select id="riskFilter"><option value="">Tüm Ayrılma Riskleri</option>${["Düşük", "Orta", "Yüksek"].map((v) => `<option value="${v}"${F.risk === v ? " selected" : ""}>${v}</option>`).join("")}</select>
+        <select id="readyFilter"><option value="">Tüm Hazır Olma Süreleri</option>${["Hazır", "0-1 yıl", "1-2 Yıl"].map((v) => `<option value="${v}"${F.ready === v ? " selected" : ""}>${v}</option>`).join("")}</select>
+        <select id="havuzFilter"><option value="">Yetenek Havuzu (Yönetici) — Hepsi</option><option value="Evet"${F.havuz === "Evet" ? " selected" : ""}>Havuza: Evet</option><option value="Hayır"${F.havuz === "Hayır" ? " selected" : ""}>Havuza: Hayır</option></select>
+        <select id="oneriFilter"><option value="">Sistem Önerisi — Hepsi</option><option value="Evet"${F.oneri === "Evet" ? " selected" : ""}>Öneri: Evet</option><option value="Hayır"${F.oneri === "Hayır" ? " selected" : ""}>Öneri: Hayır</option></select>
+        <select id="liderlikFilter"><option value="">Liderlik — Hepsi</option><option value="Var"${F.lider === "Var" ? " selected" : ""}>Liderlik: Var</option><option value="Yok"${F.lider === "Yok" ? " selected" : ""}>Liderlik: Yok</option></select>
+        <select id="gridFilter"><option value="">9-Grid — Hepsi</option>${Object.keys(GRID9).map((k) => { const pt = Number(k.split("-")[0]), pf = Number(k.split("-")[1]); return `<option value="${k}"${F.grid === k ? " selected" : ""}>${(3 - pt)}-${(pf + 1)} · ${GRID9[k].baslik}</option>`; }).join("")}</select>
+        <select id="gecisFilter" title="Fonksiyonel geçiş yapabileceği pozisyon"><option value="">Geçiş Pozisyonu — Hepsi</option>${tumUnvanlar().map((u) => `<option value="${escH(u)}"${F.gecis === u ? " selected" : ""}>${escH(u)}</option>`).join("")}</select>
       </div>
       <div class="table-scroll">
         <table class="admin-table" style="min-width:1050px">
@@ -2020,45 +2059,49 @@ function renderAdmin() {
   </div>`;
   wireTopbar();
 
-  el("#printSummary").addEventListener("click", () => downloadExecutivePdf(summaryCtx));
-
-  el("#statHavuz").addEventListener("click", () => openStatListDrawer(
-    "Yetenek Havuzuna Alınmalı (Evet)",
-    roster.filter((e) => tamamEv(e)?.yetenekHavuzuAlinmali === "Evet")
-  ));
-  el("#statLiderlik").addEventListener("click", () => openStatListDrawer(
-    "Liderlik Potansiyeli (Var)",
-    roster.filter((e) => tamamEv(e)?.liderlikPotansiyeli === "Var")
-  ));
-  el("#statFonksiyonel").addEventListener("click", () => openStatListDrawer(
-    "Fonksiyonel Geçişe Uygun (Evet)",
-    roster.filter((e) => tamamEv(e)?.fonksiyonelGecisUygun === "Evet")
-  ));
-
-  document.querySelectorAll("#grid9 .g9cell").forEach((cell) => {
-    cell.addEventListener("click", () => {
-      const c = box9[Number(cell.dataset.idx)];
-      openStatListDrawer(`${c.cell.baslik} · ${POT_ETIKET[c.pot]} / ${PERF_ETIKET[c.perf]}`, c.list);
-    });
-  });
-
-  document.querySelectorAll("#kritikRiskList .risk-alert-card").forEach((card) => {
-    card.addEventListener("click", () => {
-      const emp = findEmpById(card.dataset.id);
-      if (emp) openAdminDetailDrawer(emp);
-    });
-  });
-
+  // --- sekme göster (hafızalı) ---
+  const SEKMELER = { overview: "#tabOverview", list: "#tabList", grid: "#tabGrid", tamamlama: "#tabTamamlama", aciklama: "#tabAciklama" };
+  function sekmeGoster(key) {
+    ADM.tab = key;
+    Object.entries(SEKMELER).forEach(([k, sel]) => { const d = el(sel); if (d) d.style.display = k === key ? "block" : "none"; });
+    document.querySelectorAll(".sidebar .nav-item").forEach((n) => n.classList.toggle("active", n.dataset.nav === key));
+  }
+  sekmeGoster(ADM.tab);
   document.querySelectorAll(".sidebar .nav-item").forEach((item) => {
     item.addEventListener("click", () => {
       const key = item.dataset.nav;
       if (key === "manage") { openManagePanel(); return; }
-      document.querySelectorAll(".sidebar .nav-item").forEach((n) => n.classList.toggle("active", n === item));
-      el("#tabOverview").style.display = key === "overview" ? "" : "none";
-      el("#tabList").style.display = key === "list" ? "" : "none";
-      const tt = el("#tabTamamlama"); if (tt) tt.style.display = key === "tamamlama" ? "" : "none";
-      const ta = el("#tabAciklama"); if (ta) ta.style.display = key === "aciklama" ? "" : "none";
+      sekmeGoster(key); window.scrollTo(0, 0);
     });
+  });
+  // Genel Bakış'tan tek tıkla listeye: filtreyi kur, Personel sekmesine geç
+  function listeyeGit(f) {
+    ADM.f = Object.assign(admBosFiltre(), f || {});
+    ADM.gelismis = ["risk", "ready", "havuz", "oneri", "lider", "grid", "gecis"].some((k) => ADM.f[k]);
+    ADM.tab = "list"; renderAdmin(); window.scrollTo(0, 0);
+  }
+  document.querySelectorAll(".kpi[data-durum]").forEach((b) => b.addEventListener("click", () => listeyeGit({ durum: b.dataset.durum })));
+  document.querySelectorAll(".mgr-row").forEach((b) => b.addEventListener("click", () => listeyeGit({ mgr: b.dataset.mgr })));
+  document.querySelectorAll("[data-git]").forEach((b) => b.addEventListener("click", () => { sekmeGoster(b.dataset.git); window.scrollTo(0, 0); }));
+
+  // --- Dışa Aktar menüsü ---
+  const ddBtn = el("#ddBtn"), ddMenu = el("#ddMenu");
+  const ddKapat = () => { ddMenu.hidden = true; ddBtn.setAttribute("aria-expanded", "false"); };
+  ddBtn.addEventListener("click", (ev) => { ev.stopPropagation(); ddMenu.hidden = !ddMenu.hidden; ddBtn.setAttribute("aria-expanded", ddMenu.hidden ? "false" : "true"); });
+  document.addEventListener("click", ddKapat);
+  el("#printSummary").addEventListener("click", () => { ddKapat(); downloadExecutivePdf(summaryCtx); });
+  el("#exportCsv").addEventListener("click", () => { ddKapat(); exportCsv(); });
+  const sb = el("#exportSunum"); if (sb) sb.addEventListener("click", () => { ddKapat(); exportSunumVerisi(); });
+
+  // --- göstergeler ve matris: tek tıkla kişi listesi ---
+  el("#statHavuz").addEventListener("click", () => openStatListDrawer("Yetenek Havuzuna Alınmalı (Evet)", roster.filter((e) => tamamEv(e)?.yetenekHavuzuAlinmali === "Evet")));
+  el("#statLiderlik").addEventListener("click", () => openStatListDrawer("Liderlik Potansiyeli (Var)", roster.filter((e) => tamamEv(e)?.liderlikPotansiyeli === "Var")));
+  el("#statFonksiyonel").addEventListener("click", () => openStatListDrawer("Fonksiyonel Geçişe Uygun (Evet)", roster.filter((e) => tamamEv(e)?.fonksiyonelGecisUygun === "Evet")));
+  el("#statKritik").addEventListener("click", () => openStatListDrawer("Kritik Risk — Havuzda ve Ayrılma Riski Yüksek", kritikRisk));
+  const hucreAc = (idx) => { const c = box9[Number(idx)]; openStatListDrawer(`${c.cell.baslik} · ${POT_ETIKET[c.pot]} / ${PERF_ETIKET[c.perf]}`, c.list); };
+  document.querySelectorAll("#grid9 .g9cell, .hm-cell").forEach((cell) => cell.addEventListener("click", () => hucreAc(cell.dataset.idx)));
+  document.querySelectorAll("#kritikRiskList .risk-alert-card").forEach((card) => {
+    card.addEventListener("click", () => { const emp = findEmpById(card.dataset.id); if (emp) openAdminDetailDrawer(emp); });
   });
 
   // Tamamlama satırlarını aç/kapa (fare + klavye + aria)
@@ -2071,58 +2114,59 @@ function renderAdmin() {
     h.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
   });
 
-  let sortState = { key: "adSoyad", dir: 1 };
-
+  // --- Personel listesi (filtreler ADM.f'de saklanır; veri yenilense de kaybolmaz) ---
   let sonFiltreli = [];
+  // Kaynak: güncel (taze) ya da ilk değerlendirme arşivi — ikisi ASLA aynı satırda karışmaz
+  const arsivModu = ADM.kaynak === "arsiv";
+  const evOf = (e) => (arsivModu ? arsivMap[e.id] : evaluationsMap[e.id]);
   function draw() {
-    const term = el("#searchBox").value.trim().toLocaleLowerCase("tr");
-    const mgrF = el("#managerFilter").value;
-    const deptF = el("#deptFilter").value;
-    const stF = el("#statusFilter").value;
-    const riskF = el("#riskFilter").value;
-    const readyF = el("#readyFilter").value;
-    const havuzF = el("#havuzFilter").value;
-    const oneriF = el("#oneriFilter").value;
-    const liderF = el("#liderlikFilter").value;
-    const gridF = el("#gridFilter").value;
-    const gecisF = el("#gecisFilter").value;
-    const col = ADMIN_COLUMNS.find((c) => c.key === sortState.key);
-    const list = roster
+    const term = (F.q || "").trim().toLocaleLowerCase("tr");
+    const col = ADMIN_COLUMNS.find((c) => c.key === ADM.sort.key) || ADMIN_COLUMNS[0];
+    // Durum DIŞINDAKİ TÜM filtreler → çip sayıları bu kümeden. Böylece müdür satırındaki "3/6" ve
+    // Kapsam tablosundaki "Tamamlanan / Taslak dahil" sayıları çiplerde birebir görünür (ör. Yüksek risk: Tamamlandı 3 · Taslak 1).
+    const onDurum = roster
+      .filter((e) => !arsivModu || arsivMap[e.id])
       .filter((e) => e.adSoyad.toLocaleLowerCase("tr").includes(term))
-      .filter((e) => !mgrF || e.muduluk === mgrF)
-      .filter((e) => !deptF || e.departman === deptF)
-      .filter((e) => { const st = evaluationsMap[e.id]?.status || "bekliyor"; return !stF || st === stF; })
-      .filter((e) => !riskF || evaluationsMap[e.id]?.ayrilmaRiski === riskF)
-      .filter((e) => !readyF || evaluationsMap[e.id]?.hazirOlmaSuresi === readyF)
-      .filter((e) => !havuzF || evaluationsMap[e.id]?.yetenekHavuzuAlinmali === havuzF)
-      .filter((e) => !oneriF || (evaluationsMap[e.id] && sistemOnerisi(evaluationsMap[e.id]) === oneriF))
-      .filter((e) => !liderF || evaluationsMap[e.id]?.liderlikPotansiyeli === liderF)
-      .filter((e) => { if (!gridF) return true; const p = evaluationsMap[e.id] && gridPos(evaluationsMap[e.id]); return p && (p.pot + "-" + p.perf) === gridF; })
+      .filter((e) => !F.mgr || (e.muduluk === F.mgr && e.adSoyad !== F.mgr))
+      .filter((e) => !F.dept || e.departman === F.dept)
+      .filter((e) => !F.risk || evOf(e)?.ayrilmaRiski === F.risk)
+      .filter((e) => !F.ready || evOf(e)?.hazirOlmaSuresi === F.ready)
+      .filter((e) => !F.havuz || evOf(e)?.yetenekHavuzuAlinmali === F.havuz)
+      .filter((e) => !F.oneri || (evOf(e) && sistemOnerisi(evOf(e)) === F.oneri))
+      .filter((e) => !F.lider || evOf(e)?.liderlikPotansiyeli === F.lider)
+      .filter((e) => { if (!F.grid) return true; const p = evOf(e) && gridPos(evOf(e)); return p && (p.pot + "-" + p.perf) === F.grid; })
       .filter((e) => {
-        if (!gecisF) return true;
-        const ev = evaluationsMap[e.id]; if (!ev) return false;
-        if (Array.isArray(ev.fonksiyonelGecisPozisyonlar)) return ev.fonksiyonelGecisPozisyonlar.includes(gecisF);
-        return (ev.fonksiyonelGecisDept || "").split(/[,;]/).map((x) => x.trim()).includes(gecisF);
-      })
+        if (!F.gecis) return true;
+        const ev = evOf(e); if (!ev) return false;
+        if (Array.isArray(ev.fonksiyonelGecisPozisyonlar)) return ev.fonksiyonelGecisPozisyonlar.includes(F.gecis);
+        return (ev.fonksiyonelGecisDept || "").split(/[,;]/).map((x) => x.trim()).includes(F.gecis);
+      });
+    const cipSay = { "": onDurum.length, tamamlandi: 0, taslak: 0, bekliyor: 0, disi: 0 };
+    onDurum.forEach((e) => { cipSay[durumOf(e)]++; });
+    document.querySelectorAll("#durumCipler .chip").forEach((c) => { const b = c.querySelector("b"); if (b) b.textContent = cipSay[c.dataset.durum]; });
+    const list = onDurum
+      .filter((e) => arsivModu || !F.durum || durumOf(e) === F.durum)
       .sort((a, b) => {
-        const va = col.get(a, evaluationsMap[a.id]);
-        const vb = col.get(b, evaluationsMap[b.id]);
+        const va = col.get(a, evOf(a));
+        const vb = col.get(b, evOf(b));
         const cmp = (typeof va === "number" && typeof vb === "number") ? va - vb : String(va).localeCompare(String(vb), "tr");
-        return sortState.dir * cmp;
+        return ADM.sort.dir * cmp;
       });
     sonFiltreli = list;
+    el("#sonucSay").innerHTML = `<b>${list.length}</b> kişi listeleniyor${arsivModu ? " · arşiv" : ""}`;
 
-    const canEdit = isDuzenlenebilir();
+    const canEdit = isDuzenlenebilir() && !arsivModu;
     el("#tbody").innerHTML = list.map((e) => {
-      const ev = evaluationsMap[e.id];
-      const duzenleBtn = canEdit ? `<button type="button" class="link-btn eval-edit" data-id="${escH(e.id)}" style="color:var(--navy);font-weight:600;margin-right:10px">Düzenle</button>` : "";
-      return `<tr>${ADMIN_COLUMNS.map((c) => `<td>${c.render(e, ev)}</td>`).join("")}<td style="white-space:nowrap">${duzenleBtn}<button type="button" class="link-btn karne-print" data-id="${escH(e.id)}" style="color:var(--brass);font-weight:600">A4</button></td></tr>`;
-    }).join("") || `<tr><td colspan="${ADMIN_COLUMNS.length + 1}" class="empty-state">Kayıt bulunamadı.</td></tr>`;
+      const ev = evOf(e);
+      const duzenleBtn = canEdit ?`<button type="button" class="link-btn eval-edit" data-id="${escH(e.id)}" style="color:var(--navy);font-weight:600;margin-right:10px">Düzenle</button>` : "";
+      const a4Btn = arsivModu ? "" : `<button type="button" class="link-btn karne-print" data-id="${escH(e.id)}" style="color:var(--brass);font-weight:600">A4</button>`;
+      return `<tr>${ADMIN_COLUMNS.map((c) => `<td>${c.render(e, ev)}</td>`).join("")}<td style="white-space:nowrap">${duzenleBtn}${a4Btn || (arsivModu ? `<span style="font-size:11px;color:var(--ink-soft)" title="Arşiv kaydı salt görüntülenir">—</span>` : "")}</td></tr>`;
+    }).join("") || `<tr><td colspan="${ADMIN_COLUMNS.length + 1}" class="empty-state">Bu filtrelerle kayıt bulunamadı. <button type="button" class="link-btn" id="bosTemizle">Filtreleri temizle</button></td></tr>`;
+    const bt = el("#bosTemizle"); if (bt) bt.addEventListener("click", () => listeyeGit({}));
 
     document.querySelectorAll(".person-link").forEach((btn) => {
       btn.addEventListener("click", () => { const emp = findEmpById(btn.dataset.id); if (emp) openAdminDetailDrawer(emp); });
     });
-    // Admin: her personelin değerlendirme kartını düzenle (aktif dönemde)
     document.querySelectorAll(".eval-edit").forEach((btn) => {
       btn.addEventListener("click", () => { const emp = findEmpById(btn.dataset.id); if (emp) openEvalDrawer(emp); });
     });
@@ -2130,7 +2174,7 @@ function renderAdmin() {
       btn.addEventListener("click", () => { const emp = findEmpById(btn.dataset.id); if (emp) karneYazdir([emp]); });
     });
     document.querySelectorAll(".sort-ind").forEach((s) => {
-      s.textContent = s.dataset.key === sortState.key ? (sortState.dir === 1 ? "▲" : "▼") : "";
+      s.textContent = s.dataset.key === ADM.sort.key ? (ADM.sort.dir === 1 ? "▲" : "▼") : "";
     });
   }
   const topluBtn = el("#topluKarneBtn");
@@ -2138,24 +2182,37 @@ function renderAdmin() {
     if (!sonFiltreli.length) { toast("Yazdırılacak kayıt yok."); return; }
     karneYazdir(sonFiltreli);
   });
-
   document.querySelectorAll("table.admin-table th[data-key]").forEach((th) => {
     th.addEventListener("click", () => {
       const key = th.dataset.key;
-      if (sortState.key === key) sortState.dir *= -1;
-      else sortState = { key, dir: 1 };
+      if (ADM.sort.key === key) ADM.sort.dir *= -1;
+      else ADM.sort = { key, dir: 1 };
       draw();
     });
   });
-
-  ["searchBox", "managerFilter", "deptFilter", "statusFilter", "riskFilter", "readyFilter", "havuzFilter", "oneriFilter", "liderlikFilter", "gridFilter", "gecisFilter"].forEach((id) => {
-    el("#" + id).addEventListener("input", draw);
-    el("#" + id).addEventListener("change", draw);
+  document.querySelectorAll("#durumCipler .chip").forEach((c) => c.addEventListener("click", () => {
+    F.durum = c.dataset.durum;
+    document.querySelectorAll("#durumCipler .chip").forEach((x) => x.classList.toggle("on", x === c));
+    draw();
+  }));
+  const FILTRE_ALAN = { searchBox: "q", managerFilter: "mgr", deptFilter: "dept", riskFilter: "risk", readyFilter: "ready", havuzFilter: "havuz", oneriFilter: "oneri", liderlikFilter: "lider", gridFilter: "grid", gecisFilter: "gecis" };
+  Object.entries(FILTRE_ALAN).forEach(([id, k]) => {
+    const inp = el("#" + id);
+    const guncelle = () => { F[k] = inp.value; draw(); };
+    inp.addEventListener("input", guncelle);
+    inp.addEventListener("change", guncelle);
   });
+  el("#gelismisBtn").addEventListener("click", () => {
+    ADM.gelismis = !ADM.gelismis;
+    el("#gelismisAlan").hidden = !ADM.gelismis;
+    el("#gelismisBtn").setAttribute("aria-expanded", ADM.gelismis ? "true" : "false");
+  });
+  el("#filtreTemizle").addEventListener("click", () => listeyeGit({}));
+  document.querySelectorAll(".kaynak-sec [data-kaynak]").forEach((b) => b.addEventListener("click", () => {
+    if (ADM.kaynak === b.dataset.kaynak) return;
+    ADM.kaynak = b.dataset.kaynak; ADM.tab = "list"; renderAdmin();
+  }));
   draw();
-
-  el("#exportCsv").addEventListener("click", exportCsv);
-  const sb = el("#exportSunum"); if (sb) sb.addEventListener("click", exportSunumVerisi);
 }
 
 // ---------------------------------------------------------------
@@ -2295,7 +2352,7 @@ function exportCsv() {
     const pos = gridPos(ev);
     return [
       e.adSoyad, e.departman, e.bolum, e.mevcutUnvan, e.muduluk || "", formatKidem(e.kurumKidemiYil),
-      kidemDisi(e) ? "Kıdem<6ay (dışı)" : (ev.status || "bekliyor"),
+      ["tamamlandi", "taslak"].includes(ev.status) ? ev.status : (kidemDisi(e) ? "Kıdem<6ay (dışı)" : "bekliyor"),
       pos ? gridKoord(pos) : "", pos ? GRID9[pos.pot + "-" + pos.perf].baslik : "", pos ? POT_ETIKET[pos.pot] : "", pos ? PERF_ETIKET[pos.perf] : "",
       ev.ortalamaPotansiyel ?? "",
       ev.performansSinifi || (ev.status ? sinifLabel(performansSkoru(ev)) : ""), (ev.status ? (sistemOnerisi(ev) || "") : ""), (ev.status ? sistemGerekce(ev) : "").replace(/\n/g, " "),
