@@ -1586,10 +1586,15 @@ async function downloadExecutivePdf(ctx) {
     function statTile(x, val, label, w) {
       pdf.setDrawColor(...LINE); pdf.setFillColor(255, 255, 255);
       pdf.roundedRect(x, y, w, 18, 2, 2, "FD");
+      pdf.setFont("helvetica", "normal"); pdf.setFontSize(7);
+      // helvetica ğ/ı/ş/İ basamaz (harfler bozulup kutudan taşar) → kutu etiketinde sadeleştir
+      const sade = String(label).replace(/[ğĞıİşŞ]/g, (c) => ({ "ğ": "g", "Ğ": "G", "ı": "i", "İ": "I", "ş": "s", "Ş": "S" }[c]));
+      const satirlar = pdf.splitTextToSize(sade, w - 8).slice(0, 2);
+      const iki = satirlar.length > 1;
       pdf.setTextColor(...NAVY); pdf.setFont("helvetica", "bold"); pdf.setFontSize(15);
-      pdf.text(String(val), x + 4, y + 9);
+      pdf.text(String(val), x + 4, y + (iki ? 8 : 9));
       pdf.setTextColor(...INKSOFT); pdf.setFont("helvetica", "normal"); pdf.setFontSize(7);
-      pdf.text(label, x + 4, y + 15, { maxWidth: w - 8 });
+      pdf.text(satirlar, x + 4, y + (iki ? 12.6 : 15));
     }
     function tableRow(cols, widths, opts) {
       opts = opts || {};
@@ -1604,16 +1609,16 @@ async function downloadExecutivePdf(ctx) {
     }
 
     header();
-    const tileW = (W - 2 * M - 3 * 4) / 4;
-    const stats = [
-      [ctx.total, "Toplam Personel"], [ctx.done, "Tamamlandı"], [ctx.draft, "Taslak"], [ctx.total - ctx.done - ctx.draft, "Bekliyor"],
-      [ctx.havuzEvet, "Yetenek Havuzuna Alınmalı"], [ctx.liderlikVar, "Liderlik Potansiyeli"], [ctx.fonksiyonelEvet, "Fonksiyonel Geçişe Uygun"], [ctx.kritikRisk.length, "Kritik Risk"]
+    // 1. satır 5 kutu (Toplam · Değerlendirme Dışı · Tamamlandı · Taslak · Bekliyor), 2. satır 4 kutu
+    const statRows = [
+      [[ctx.total, "Toplam Personel"], [ctx.disi, "Değerlendirme Dışı (6 Ay Altı Kıdem)"], [ctx.done, "Tamamlandı"], [ctx.draft, "Taslak"], [ctx.bekliyor, "Bekliyor"]],
+      [[ctx.havuzEvet, "Yetenek Havuzuna Alınmalı"], [ctx.liderlikVar, "Liderlik Potansiyeli"], [ctx.fonksiyonelEvet, "Fonksiyonel Geçişe Uygun"], [ctx.kritikRisk.length, "Kritik Risk"]]
     ];
-    let sx = M;
-    stats.forEach((s, i) => {
-      statTile(sx, s[0], s[1], tileW);
-      sx += tileW + 4;
-      if (i === 3) { sx = M; y += 22; }
+    statRows.forEach((satir, ri) => {
+      const tileW = (W - 2 * M - (satir.length - 1) * 4) / satir.length;
+      let sx = M;
+      satir.forEach((s) => { statTile(sx, s[0], s[1], tileW); sx += tileW + 4; });
+      if (ri === 0) y += 22;
     });
     y += 26;
 
@@ -1676,6 +1681,10 @@ function renderAdmin() {
   const total = roster.length;
   const done = roster.filter((e) => evaluationsMap[e.id]?.status === "tamamlandi").length;
   const draft = roster.filter((e) => evaluationsMap[e.id]?.status === "taslak").length;
+  // 6 ay altı kıdem: değerlendirme dışı; Bekliyor'a sayılmaz (Toplam = Dışı + Tamamlandı + Taslak + Bekliyor)
+  const doluMu = (e) => ["tamamlandi", "taslak"].includes(evaluationsMap[e.id]?.status);
+  const disi = roster.filter((e) => kidemDisi(e) && !doluMu(e)).length;
+  const bekliyor = total - done - draft - disi;
   const noManager = roster.filter((e) => !e.muduluk).length;
   const managers = Array.from(new Set(roster.map((e) => e.muduluk).filter(Boolean))).sort((a, b) => a.localeCompare(b, "tr"));
   const depts = Array.from(new Set(roster.map((e) => e.departman).filter(Boolean))).sort((a, b) => a.localeCompare(b, "tr"));
@@ -1695,7 +1704,7 @@ function renderAdmin() {
   const completionSegs = [
     { label: "Tamamlandı", value: done, color: "var(--good)" },
     { label: "Taslak", value: draft, color: "var(--warn)" },
-    { label: "Bekliyor", value: total - done - draft, color: "#9aa2ad" }
+    { label: "Bekliyor", value: bekliyor, color: "#9aa2ad" }
   ];
 
   // --- attrition risk donut (only employees with a recorded risk) ---
@@ -1728,7 +1737,7 @@ function renderAdmin() {
     .filter((e) => { const ev = evaluationsMap[e.id]; return ev?.yetenekHavuzuAlinmali === "Evet" && ev?.ayrilmaRiski === "Yüksek"; })
     .sort((a, b) => (evaluationsMap[b.id]?.ortalamaPotansiyel || 0) - (evaluationsMap[a.id]?.ortalamaPotansiyel || 0));
 
-  const summaryCtx = { total, done, draft, havuzEvet, liderlikVar, fonksiyonelEvet, deptData, box9, kritikRisk, evaluationsMap };
+  const summaryCtx = { total, done, draft, disi, bekliyor, havuzEvet, liderlikVar, fonksiyonelEvet, deptData, box9, kritikRisk, evaluationsMap };
   const compData = buildCompletionData();
 
   root().innerHTML = `
@@ -1755,9 +1764,10 @@ function renderAdmin() {
     </div>
     <div class="stat-row">
       <div class="stat-card"><div class="n">${total}</div><div class="l">Toplam Personel</div></div>
+      <div class="stat-card" title="İşe başlama tarihine göre kıdemi 6 aydan kısa olan çalışanlar değerlendirme dışıdır; Bekliyor sayısına dahil edilmez."><div class="n">${disi}</div><div class="l">Kişi Değerlendirme Dışı (6 Ay Altı Kıdem)</div></div>
       <div class="stat-card"><div class="n">${done}</div><div class="l">Tamamlandı</div></div>
       <div class="stat-card"><div class="n">${draft}</div><div class="l">Taslak</div></div>
-      <div class="stat-card"><div class="n">${total - done - draft}</div><div class="l">Bekliyor</div></div>
+      <div class="stat-card"><div class="n">${bekliyor}</div><div class="l">Bekliyor</div></div>
     </div>
     <div class="stat-row">
       <div class="stat-card" id="statHavuz" style="cursor:pointer"><div class="n">${havuzEvet}</div><div class="l">Yetenek Havuzuna Alınmalı (Evet)</div></div>
