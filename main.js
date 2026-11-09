@@ -348,6 +348,7 @@ let employeesCache = [];   // from Firestore 'employees'
 let allEvalsMap = {};      // docId -> evaluation doc (tüm dönemler)
 let evaluationsMap = {};   // employeeId -> GÜNCEL (taze) değerlendirme
 let arsivMap = {};         // employeeId -> ARŞİV (eski/içe aktarılan) değerlendirme — sadece admin
+let tazeMap = {};          // employeeId -> yalnız müdürlerin girdiği taze değerlendirme (arşiv hariç) — admin Genel Bakış sayıları
 let unsubEval = null;
 let unsubEmp = null;
 
@@ -389,18 +390,23 @@ function rebuildEvalMap() {
   const admin = currentProfile && currentProfile.isAdmin;
   const nameToId = {};
   employeesCache.forEach((e) => { if (e.adSoyad) nameToId[nameKey(e.adSoyad)] = e.id; });
+  tazeMap = {};
   Object.values(allEvalsMap).forEach((ev) => {
     const nk = nameKey(ev.adSoyad || "");
     const key = nameToId[nk] || ev.employeeId || ev.id;
     if (evalArsivMi(ev)) {
       const c = arsivMap[key];
       if (!c || evalDahaYeni(ev, c)) arsivMap[key] = ev;
-      if (!admin) return; // MÜDÜR: arşivi görmez (boş sayfa, sıfırdan doldurur)
-      // ADMIN: arşiv de güncel havuza girer (görebilir + filtreleyebilir)
+      return;
     }
-    const cur = evaluationsMap[key];
-    if (!cur || evalDahaYeni(ev, cur)) evaluationsMap[key] = ev;
+    const cur = tazeMap[key];
+    if (!cur || evalDahaYeni(ev, cur)) tazeMap[key] = ev;
   });
+  // MÜDÜR: yalnız taze kayıtlar (arşivi görmez, sıfırdan doldurur).
+  // ADMIN: taze kayıt HER ZAMAN öncelikli; tazesi olmayan kişide arşiv görünür (listede görebilir + filtreleyebilir).
+  // (Eskiden tarihi daha yeni olan arşiv, müdürün taze değerlendirmesini admin ekranında gizleyebiliyordu.)
+  Object.assign(evaluationsMap, tazeMap);
+  if (admin) Object.keys(arsivMap).forEach((k) => { if (!evaluationsMap[k]) evaluationsMap[k] = arsivMap[k]; });
 }
 
 // Düzenleme yapılabilir mi? (sadece aktif dönem düzenlenebilir)
@@ -1756,18 +1762,24 @@ const ADMIN_COLUMNS = [
 function renderAdmin() {
   const roster = adminRoster();
   const total = roster.length;
-  const done = roster.filter((e) => evaluationsMap[e.id]?.status === "tamamlandi").length;
-  const draft = roster.filter((e) => evaluationsMap[e.id]?.status === "taslak").length;
+  // GENEL BAKIŞ sayıları YALNIZ bugünkü personelin müdürlerce girilen (taze) değerlendirmelerinden gelir:
+  // Mayıs/Otokoç arşivi ve işten ayrılanların kayıtları kart, oran ve grafiklere girmez
+  // (Personel Listesi ve karnede görünmeye devam eder). Risk/havuz/liderlik/9-Grid = yalnız TAMAMLANANLAR.
+  const tazeDurum = (e) => tazeMap[e.id]?.status;
+  const tamamEv = (e) => (tazeDurum(e) === "tamamlandi" ? tazeMap[e.id] : null);
+  const tamamlananlar = roster.map(tamamEv).filter(Boolean);
+  const done = tamamlananlar.length;
+  const draft = roster.filter((e) => tazeDurum(e) === "taslak").length;
   // 6 ay altı kıdem: değerlendirme dışı; Bekliyor'a sayılmaz (Toplam = Dışı + Tamamlandı + Taslak + Bekliyor)
-  const doluMu = (e) => ["tamamlandi", "taslak"].includes(evaluationsMap[e.id]?.status);
+  const doluMu = (e) => ["tamamlandi", "taslak"].includes(tazeDurum(e));
   const disi = roster.filter((e) => kidemDisi(e) && !doluMu(e)).length;
   const bekliyor = total - done - draft - disi;
   const noManager = roster.filter((e) => !e.muduluk).length;
   const managers = Array.from(new Set(roster.map((e) => e.muduluk).filter(Boolean))).sort((a, b) => a.localeCompare(b, "tr"));
   const depts = Array.from(new Set(roster.map((e) => e.departman).filter(Boolean))).sort((a, b) => a.localeCompare(b, "tr"));
-  const havuzEvet = Object.values(evaluationsMap).filter((e) => e.yetenekHavuzuAlinmali === "Evet").length;
-  const liderlikVar = Object.values(evaluationsMap).filter((e) => e.liderlikPotansiyeli === "Var").length;
-  const fonksiyonelEvet = Object.values(evaluationsMap).filter((e) => e.fonksiyonelGecisUygun === "Evet").length;
+  const havuzEvet = tamamlananlar.filter((ev) => ev.yetenekHavuzuAlinmali === "Evet").length;
+  const liderlikVar = tamamlananlar.filter((ev) => ev.liderlikPotansiyeli === "Var").length;
+  const fonksiyonelEvet = tamamlananlar.filter((ev) => ev.fonksiyonelGecisUygun === "Evet").length;
 
   // --- department distribution (top 8 + "Diğer") ---
   const deptCounts = {};
@@ -1784,21 +1796,40 @@ function renderAdmin() {
     { label: "Bekliyor", value: bekliyor, color: "#9aa2ad" }
   ];
 
-  // --- attrition risk donut (only employees with a recorded risk) ---
-  const riskCounts = { "Düşük": 0, "Orta": 0, "Yüksek": 0 };
-  Object.values(evaluationsMap).forEach((ev) => { if (riskCounts[ev.ayrilmaRiski] !== undefined) riskCounts[ev.ayrilmaRiski]++; });
-  const riskSegs = [
-    { label: "Düşük Risk", value: riskCounts["Düşük"], color: "var(--good)" },
-    { label: "Orta Risk", value: riskCounts["Orta"], color: "var(--warn)" },
-    { label: "Yüksek Risk", value: riskCounts["Yüksek"], color: "var(--bad)" }
+  // --- VERİ KAPSAMLARI (yalnız bugünkü personel): tamamlanan · taslaklar dahil · Mayıs/Otokoç arşivi ---
+  const taslakEvler = roster.map((e) => (tazeDurum(e) === "taslak" ? tazeMap[e.id] : null)).filter(Boolean);
+  const taslakDahil = tamamlananlar.concat(taslakEvler);
+  const arsivEvler = roster.map((e) => arsivMap[e.id]).filter(Boolean);
+  const riskSay = (L) => { const r = { "Düşük": 0, "Orta": 0, "Yüksek": 0 }; L.forEach((ev) => { if (r[ev.ayrilmaRiski] !== undefined) r[ev.ayrilmaRiski]++; }); return r; };
+  const riskSegsOf = (L) => { const r = riskSay(L); return [
+    { label: "Düşük Risk", value: r["Düşük"], color: "var(--good)" },
+    { label: "Orta Risk", value: r["Orta"], color: "var(--warn)" },
+    { label: "Yüksek Risk", value: r["Yüksek"], color: "var(--bad)" }
+  ]; };
+  const riskKart = (baslik, aciklama, L) => {
+    const r = riskSay(L); const girilen = r["Düşük"] + r["Orta"] + r["Yüksek"];
+    return `<div class="chart-card risk-kart"><h3>${baslik}</h3>
+      <div class="ck-alt">${aciklama} · <b>${L.length}</b> kayıt${L.length !== girilen ? ` (${L.length - girilen} kayıtta risk girilmemiş)` : ""}</div>
+      ${L.length ? donutChart(riskSegsOf(L)) : `<div class="ck-bos">Bu kapsamda kayıt yok.</div>`}</div>`;
+  };
+  const kapsamlar = [["Tamamlanan", tamamlananlar], ["Taslak dahil", taslakDahil], ["Arşiv", arsivEvler]];
+  const olculer = [
+    ["Kayıt", (L) => L.length],
+    ["Havuza alınmalı", (L) => L.filter((ev) => ev.yetenekHavuzuAlinmali === "Evet").length],
+    ["Liderlik potansiyeli", (L) => L.filter((ev) => ev.liderlikPotansiyeli === "Var").length],
+    ["Fonksiyonel geçiş", (L) => L.filter((ev) => ev.fonksiyonelGecisUygun === "Evet").length],
+    ["Yüksek ayrılma riski", (L) => L.filter((ev) => ev.ayrilmaRiski === "Yüksek").length]
   ];
+  const kapsamTablo = `<table class="kapsam-tbl"><thead><tr><th></th>${kapsamlar.map(([k]) => `<th>${k}</th>`).join("")}</tr></thead>
+    <tbody>${olculer.map(([ad, f], i) => `<tr${i === 0 ? ' class="ana"' : ""}><td>${ad}</td>${kapsamlar.map(([, L]) => `<td>${f(L)}</td>`).join("")}</tr>`).join("")}</tbody></table>
+    <div class="ck-not">Tümü bugün çalışan personel içindir. Üstteki kartlar ve 9-Grid <b>Tamamlanan</b> sütununu esas alır; arşiv yeni dönem verisiyle karışmaz.</div>`;
 
   // --- 9-GRID: Liderlik Potansiyeli (satır, yüksek→düşük) × Performans (sütun, düşük→yüksek) ---
   const grid9 = {};
   Object.keys(GRID9).forEach((k) => (grid9[k] = []));
   let yerlesenSayi = 0;
   roster.forEach((e) => {
-    const pos = gridPos(evaluationsMap[e.id]);
+    const pos = gridPos(tamamEv(e));
     if (pos) { grid9[`${pos.pot}-${pos.perf}`].push(e); yerlesenSayi++; }
   });
   const box9 = [];
@@ -1811,8 +1842,8 @@ function renderAdmin() {
 
   // --- critical retention risk: in talent pool AND high attrition risk ---
   const kritikRisk = roster
-    .filter((e) => { const ev = evaluationsMap[e.id]; return ev?.yetenekHavuzuAlinmali === "Evet" && ev?.ayrilmaRiski === "Yüksek"; })
-    .sort((a, b) => (evaluationsMap[b.id]?.ortalamaPotansiyel || 0) - (evaluationsMap[a.id]?.ortalamaPotansiyel || 0));
+    .filter((e) => { const ev = tamamEv(e); return ev?.yetenekHavuzuAlinmali === "Evet" && ev?.ayrilmaRiski === "Yüksek"; })
+    .sort((a, b) => (tamamEv(b)?.ortalamaPotansiyel || 0) - (tamamEv(a)?.ortalamaPotansiyel || 0));
 
   const summaryCtx = { total, done, draft, disi, bekliyor, havuzEvet, liderlikVar, fonksiyonelEvet, deptData, box9, kritikRisk, evaluationsMap };
   const compData = buildCompletionData();
@@ -1856,7 +1887,7 @@ function renderAdmin() {
     ${(isDuzenlenebilir() && noManager) ? `<div class="error-box" style="display:block;background:var(--warn-bg);color:var(--warn)">${noManager} personelin müdürü eşleşmedi. "Yönetim" menüsünden atayabilirsiniz.</div>` : ""}
 
     <div id="tabOverview">
-      <div class="chart-grid">
+      <div class="chart-grid ilk">
         <div class="chart-card">
           <h3>Departman Dağılımı</h3>
           ${barListHtml(deptData)}
@@ -1866,9 +1897,15 @@ function renderAdmin() {
           ${donutChart(completionSegs)}
         </div>
         <div class="chart-card">
-          <h3>Ayrılma Riski Dağılımı</h3>
-          ${donutChart(riskSegs)}
+          <h3>Kapsam Karşılaştırması</h3>
+          ${kapsamTablo}
         </div>
+      </div>
+      <div class="ck-bolum">Ayrılma Riski · Veri Kapsamına Göre</div>
+      <div class="chart-grid uc">
+        ${riskKart("Tamamlanan (Taslaklar Hariç)", "Müdürlerin tamamladığı değerlendirmeler", tamamlananlar)}
+        ${riskKart("Taslaklar Dahil", "Tamamlanan + kaydedilmiş taslaklar", taslakDahil)}
+        ${riskKart("Arşiv (Mayıs / Otokoç)", "İlk etap ön değerlendirmeleri", arsivEvler)}
       </div>
 
       <div class="box9-wrap">
@@ -1987,15 +2024,15 @@ function renderAdmin() {
 
   el("#statHavuz").addEventListener("click", () => openStatListDrawer(
     "Yetenek Havuzuna Alınmalı (Evet)",
-    roster.filter((e) => evaluationsMap[e.id]?.yetenekHavuzuAlinmali === "Evet")
+    roster.filter((e) => tamamEv(e)?.yetenekHavuzuAlinmali === "Evet")
   ));
   el("#statLiderlik").addEventListener("click", () => openStatListDrawer(
     "Liderlik Potansiyeli (Var)",
-    roster.filter((e) => evaluationsMap[e.id]?.liderlikPotansiyeli === "Var")
+    roster.filter((e) => tamamEv(e)?.liderlikPotansiyeli === "Var")
   ));
   el("#statFonksiyonel").addEventListener("click", () => openStatListDrawer(
     "Fonksiyonel Geçişe Uygun (Evet)",
-    roster.filter((e) => evaluationsMap[e.id]?.fonksiyonelGecisUygun === "Evet")
+    roster.filter((e) => tamamEv(e)?.fonksiyonelGecisUygun === "Evet")
   ));
 
   document.querySelectorAll("#grid9 .g9cell").forEach((cell) => {
