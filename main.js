@@ -255,6 +255,7 @@ const ICONS = {
   gear: `<svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 15.4a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8Z" fill="currentColor"/><path d="M19.4 13.6l1.7-1-2-3.4-1.9.7a6.9 6.9 0 0 0-1.5-.9l-.3-2h-4l-.3 2a6.9 6.9 0 0 0-1.5.9l-1.9-.7-2 3.4 1.7 1a7 7 0 0 0 0 1.7l-1.7 1 2 3.4 1.9-.7c.4.4 1 .7 1.5.9l.3 2h4l.3-2c.5-.2 1.1-.5 1.5-.9l1.9.7 2-3.4-1.7-1a7 7 0 0 0 0-1.7Z" fill="currentColor" opacity=".55"/></svg>`,
   progress: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="4" rx="2" fill="currentColor" opacity=".32"/><rect x="3" y="5" width="12" height="4" rx="2" fill="currentColor"/><rect x="3" y="15" width="18" height="4" rx="2" fill="currentColor" opacity=".32"/><rect x="3" y="15" width="7" height="4" rx="2" fill="currentColor" opacity=".7"/></svg>`,
   matris: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="5" rx="1" fill="currentColor" opacity=".45"/><rect x="9.5" y="3" width="5" height="5" rx="1" fill="currentColor" opacity=".7"/><rect x="16" y="3" width="5" height="5" rx="1" fill="currentColor"/><rect x="3" y="9.5" width="5" height="5" rx="1" fill="currentColor" opacity=".3"/><rect x="9.5" y="9.5" width="5" height="5" rx="1" fill="currentColor" opacity=".55"/><rect x="16" y="9.5" width="5" height="5" rx="1" fill="currentColor" opacity=".7"/><rect x="3" y="16" width="5" height="5" rx="1" fill="currentColor" opacity=".2"/><rect x="9.5" y="16" width="5" height="5" rx="1" fill="currentColor" opacity=".3"/><rect x="16" y="16" width="5" height="5" rx="1" fill="currentColor" opacity=".45"/></svg>`,
+  gecis: `<svg width="16" height="16" viewBox="0 0 24 24"><path d="M4 7h11l-3-3M20 17H9l3 3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18.5" cy="7" r="2.2" fill="currentColor" opacity=".55"/><circle cx="5.5" cy="17" r="2.2" fill="currentColor" opacity=".55"/></svg>`,
   doc: `<svg width="16" height="16" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5" fill="currentColor" opacity=".32"/><rect x="7.5" y="7" width="9" height="2" rx="1" fill="currentColor"/><rect x="7.5" y="11" width="9" height="2" rx="1" fill="currentColor"/><rect x="7.5" y="15" width="6" height="2" rx="1" fill="currentColor"/></svg>`
 };
 
@@ -352,7 +353,38 @@ let arsivMap = {};         // employeeId -> ARŞİV (eski/içe aktarılan) değe
 let tazeMap = {};          // employeeId -> yalnız müdürlerin girdiği taze değerlendirme (arşiv hariç) — admin Genel Bakış sayıları
 // Admin ekran durumu: sekme + liste filtreleri veri yenilense (onSnapshot → render) de korunur
 function admBosFiltre() { return { q: "", mgr: "", dept: "", durum: "", risk: "", ready: "", havuz: "", oneri: "", lider: "", grid: "", gecis: "" }; }
-const ADM = { tab: "overview", f: admBosFiltre(), gelismis: false, sort: { key: "adSoyad", dir: 1 }, kaynak: "guncel" };
+const ADM = { tab: "overview", f: admBosFiltre(), gelismis: false, sort: { key: "adSoyad", dir: 1 }, kaynak: "guncel",
+  gecis: { kapsam: "tamam", tur: "", secili: null, q: "" } };
+
+// ---------------------------------------------------------------
+// FONKSİYONEL GEÇİŞ UNVANLARI: hedef unvan → o unvana işaretlenen kişiler
+// Kaynaklar: "Geçiş Yapabileceği Pozisyon(lar)" (fonksiyonelGecisPozisyonlar / fonksiyonelGecisDept)
+//            + "Yedekleyebileceği Pozisyonlar" (yedekPozisyonlar, serbest metin; virgül/; ile ayrılır)
+// Kapsam: tamam = taze tamamlanan · taslak = taze tamamlanan + taslak · arsiv = ilk değerlendirme arşivi
+// ---------------------------------------------------------------
+const GECIS_BOS = /^(-+|—|yok|yoktur|bulunmamaktadır|bulunmamaktadir|n\/?a|hayır|hayir|\.)$/i;
+function gecisUnvanBol(s) { return String(s || "").split(/[,;\n]/).map((x) => x.replace(/\s+/g, " ").trim()).filter((x) => x && !GECIS_BOS.test(x)); }
+function gecisGrupla(roster, kapsam, tur) {
+  const G = new Map();
+  roster.forEach((e) => {
+    let ev = null;
+    if (kapsam === "arsiv") ev = arsivMap[e.id] || null;
+    else { const t = tazeMap[e.id]; if (t && (t.status === "tamamlandi" || (kapsam === "taslak" && t.status === "taslak"))) ev = t; }
+    if (!ev) return;
+    const fg = Array.isArray(ev.fonksiyonelGecisPozisyonlar) && ev.fonksiyonelGecisPozisyonlar.length ? ev.fonksiyonelGecisPozisyonlar : gecisUnvanBol(ev.fonksiyonelGecisDept);
+    const ekle = (u, kaynak) => {
+      const ad = String(u || "").replace(/\s+/g, " ").trim(); if (!ad || GECIS_BOS.test(ad)) return;
+      const k = ad.toLocaleUpperCase("tr");
+      if (!G.has(k)) G.set(k, { ad: k, kisiler: new Map() });
+      const g = G.get(k); const p = g.kisiler.get(e.id) || { e, ev, kaynak: new Set() };
+      p.kaynak.add(kaynak); g.kisiler.set(e.id, p);
+    };
+    if (tur !== "yedek") fg.forEach((u) => ekle(u, "gecis"));
+    if (tur !== "gecis") gecisUnvanBol(ev.yedekPozisyonlar).forEach((u) => ekle(u, "yedek"));
+  });
+  return [...G.values()].map((g) => ({ ad: g.ad, kisiler: [...g.kisiler.values()].sort((a, b) => a.e.adSoyad.localeCompare(b.e.adSoyad, "tr")) }))
+    .sort((a, b) => b.kisiler.length - a.kisiler.length || a.ad.localeCompare(b.ad, "tr"));
+}
 let unsubEval = null;
 let unsubEmp = null;
 
@@ -1894,6 +1926,7 @@ function renderAdmin() {
     { key: "overview", icon: ICONS.grid, label: "Genel Bakış" },
     { key: "list", icon: ICONS.people, label: "Personel" },
     { key: "grid", icon: ICONS.matris, label: "Yetenek Matrisi" },
+    { key: "gecis", icon: ICONS.gecis, label: "Fonksiyonel Geçiş Unvanları" },
     { key: "tamamlama", icon: ICONS.progress, label: "Tamamlama Oranları" },
     { key: "manage", icon: ICONS.gear, label: "Yönetim" },
     { key: "aciklama", icon: ICONS.doc, label: "Açıklamalar" }
@@ -2014,6 +2047,8 @@ function renderAdmin() {
       </div>
     </div>
 
+    <div id="tabGecis" class="sekme"></div>
+
     <div id="tabList" class="sekme">
       <div class="kaynak-sec" role="tablist" aria-label="Veri kaynağı">
         <button type="button" role="tab" data-kaynak="guncel" class="${ADM.kaynak === "guncel" ? "on" : ""}">Güncel değerlendirmeler</button>
@@ -2060,7 +2095,54 @@ function renderAdmin() {
   wireTopbar();
 
   // --- sekme göster (hafızalı) ---
-  const SEKMELER = { overview: "#tabOverview", list: "#tabList", grid: "#tabGrid", tamamlama: "#tabTamamlama", aciklama: "#tabAciklama" };
+  const SEKMELER = { overview: "#tabOverview", list: "#tabList", grid: "#tabGrid", gecis: "#tabGecis", tamamlama: "#tabTamamlama", aciklama: "#tabAciklama" };
+
+  // --- Fonksiyonel Geçiş Unvanları sekmesi (kendi içinde yeniden çizilir; seçimler ADM.gecis'te korunur) ---
+  function gecisCiz() {
+    const G = ADM.gecis;
+    const gruplar = gecisGrupla(roster, G.kapsam, G.tur);
+    const q = (G.q || "").trim().toLocaleUpperCase("tr");
+    const gorunen = gruplar.filter((g) => !q || g.ad.includes(q));
+    if (!G.secili || !gruplar.some((g) => g.ad === G.secili)) G.secili = gorunen.length ? gorunen[0].ad : null;
+    const sec = gruplar.find((g) => g.ad === G.secili);
+    const kisiSay = new Set(gruplar.flatMap((g) => g.kisiler.map((p) => p.e.id))).size;
+    const enCok = gruplar.length ? gruplar[0].kisiler.length : 1;
+    const seg = (alan, secenekler) => `<div class="kaynak-sec" data-alan="${alan}">${secenekler.map(([v, l]) => `<button type="button" data-v="${v}" class="${G[alan] === v ? "on" : ""}">${l}</button>`).join("")}</div>`;
+    const kisiHtml = (p) => {
+      const ev = p.ev; const e = p.e;
+      const etiket = [...p.kaynak].map((k) => k === "gecis" ? `<span class="gk-et">Fonksiyonel geçiş</span>` : `<span class="gk-et y">Yedekleyebilir</span>`).join("");
+      const durum = G.kapsam === "arsiv" ? `<span class="status-badge status-arsiv">Arşiv</span>` : (ev.status === "taslak" ? `<span class="status-badge status-taslak">Taslak</span>` : "");
+      return `<button type="button" class="gk-kisi" data-id="${escH(e.id)}">
+        ${avatarHtml(e.adSoyad, 34)}
+        <span class="gk-ana"><b>${escH(e.adSoyad)}</b>
+          <small>Bugün: <strong>${escH(e.mevcutUnvan || "—")}</strong> · ${escH(e.departman || "")}${e.muduluk && e.muduluk !== "-" ? " · Müdürü: " + escH(e.muduluk) : ""}</small>
+          <small class="gk-ok">${escH(e.mevcutUnvan || "Mevcut unvan")} → <strong>${escH(sec.ad)}</strong> olabilir${ev.hazirOlmaSuresi ? " · Hazır olma: " + escH(ev.hazirOlmaSuresi) : ""}</small></span>
+        <span class="gk-sag">${etiket}${durum}</span>
+      </button>`;
+    };
+    el("#tabGecis").innerHTML = `
+      <div class="gecis-ust">
+        ${seg("kapsam", [["tamam", "Tamamlanan"], ["taslak", "Taslak dahil"], ["arsiv", "İlk değerlendirme (arşiv)"]])}
+        ${seg("tur", [["", "Tümü"], ["gecis", "Fonksiyonel geçiş"], ["yedek", "Yedekleyebileceği"]])}
+        <input type="text" id="gecisAra" placeholder="Unvan ara…" value="${escH(G.q || "")}">
+      </div>
+      <p class="gecis-ozet"><b>${gruplar.length}</b> hedef unvan · <b>${kisiSay}</b> kişi (bir kişi birden fazla unvana işaretlenmiş olabilir) · kaynak: “Geçiş Yapabileceği Pozisyon(lar)” ve “Yedekleyebileceği Pozisyonlar”</p>
+      ${gruplar.length ? `<div class="gecis-grid">
+        <div class="pnl gecis-sol">
+          ${gorunen.map((g) => `<button type="button" class="gk-unvan ${g.ad === G.secili ? "on" : ""}" data-unvan="${escH(g.ad)}"><span class="gu-ad">${escH(g.ad)}</span><span class="gu-bar"><i style="width:${Math.round(g.kisiler.length / enCok * 100)}%"></i></span><b>${g.kisiler.length}</b></button>`).join("") || `<div class="bos-not">Aramaya uyan unvan yok.</div>`}
+        </div>
+        <div class="pnl gecis-sag">
+          ${sec ? `<div class="pnl-h"><div><h3>${escH(sec.ad)}</h3><p><b>${sec.kisiler.length}</b> kişi bu unvana işaretlenmiş · kişiye tıklayınca karnesi açılır</p></div></div>
+          <div class="gk-liste">${sec.kisiler.map(kisiHtml).join("")}</div>` : `<div class="bos-not">Soldan bir unvan seçin.</div>`}
+        </div>
+      </div>` : `<div class="pnl"><div class="bos-not">Bu kapsamda fonksiyonel geçiş ya da yedekleme unvanı girilmiş değerlendirme yok.</div></div>`}`;
+    document.querySelectorAll("#tabGecis .kaynak-sec").forEach((sg) => sg.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { G[sg.dataset.alan] = b.dataset.v; gecisCiz(); })));
+    document.querySelectorAll("#tabGecis .gk-unvan").forEach((b) => b.addEventListener("click", () => { G.secili = b.dataset.unvan; gecisCiz(); }));
+    document.querySelectorAll("#tabGecis .gk-kisi").forEach((b) => b.addEventListener("click", () => { const emp = findEmpById(b.dataset.id); if (emp) openAdminDetailDrawer(emp); }));
+    const ara = el("#gecisAra");
+    if (ara) ara.addEventListener("input", () => { G.q = ara.value; const pos = ara.selectionStart; gecisCiz(); const a2 = el("#gecisAra"); if (a2) { a2.focus(); a2.setSelectionRange(pos, pos); } });
+  }
+  gecisCiz();
   function sekmeGoster(key) {
     ADM.tab = key;
     Object.entries(SEKMELER).forEach(([k, sel]) => { const d = el(sel); if (d) d.style.display = k === key ? "block" : "none"; });

@@ -282,6 +282,38 @@
   .sonuc-say{font-size:12.5px;color:var(--ink-soft);}
   .sonuc-say b{color:var(--navy);}
   .rozet{display:inline-block;min-width:18px;padding:0 6px;border-radius:10px;background:var(--brass);color:#fff;font-size:11px;line-height:18px;text-align:center;}
+  /* ---------- Fonksiyonel Geçiş Unvanları ---------- */
+  .gecis-ust{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:6px;}
+  .gecis-ust .kaynak-sec{margin-bottom:0;}
+  .gecis-ust input{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:13px;min-width:200px;}
+  .gecis-ozet{font-size:12.5px;color:var(--ink-soft);margin:8px 0 12px;}
+  .gecis-ozet b{color:var(--navy);}
+  .gecis-grid{display:grid;grid-template-columns:minmax(260px,360px) 1fr;gap:14px;align-items:start;}
+  @media(max-width:900px){.gecis-grid{grid-template-columns:1fr;}}
+  .gecis-sol{padding:8px;display:flex;flex-direction:column;gap:2px;max-height:72vh;overflow:auto;}
+  .gk-unvan{display:grid;grid-template-columns:1fr 64px 30px;align-items:center;gap:10px;border:none;background:none;border-radius:8px;padding:9px 10px;text-align:left;font-family:inherit;cursor:pointer;}
+  .gk-unvan:hover{background:#f3f6fb;}
+  .gk-unvan.on{background:var(--navy);}
+  .gk-unvan.on .gu-ad,.gk-unvan.on b{color:#fff;}
+  .gu-ad{font-size:12.5px;font-weight:600;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .gu-bar{height:6px;border-radius:4px;background:#e6ebf2;overflow:hidden;}
+  .gu-bar i{display:block;height:100%;background:var(--brass);border-radius:4px;}
+  .gk-unvan.on .gu-bar{background:rgba(255,255,255,.2);}
+  .gk-unvan.on .gu-bar i{background:#8cb7ee;}
+  .gk-unvan b{font-size:13px;color:var(--navy);text-align:right;font-variant-numeric:tabular-nums;}
+  .gk-liste{display:flex;flex-direction:column;gap:8px;}
+  .gk-kisi{display:flex;align-items:center;gap:12px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 12px;text-align:left;font-family:inherit;cursor:pointer;}
+  .gk-kisi:hover{border-color:#a9bdd8;box-shadow:0 6px 16px -12px rgba(19,42,70,.4);}
+  .gk-kisi .avatar{flex:none;}
+  .gk-ana{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+  .gk-ana b{font-size:13.5px;color:var(--ink);}
+  .gk-ana small{font-size:11.5px;color:var(--ink-soft);}
+  .gk-ana small strong{color:var(--ink);font-weight:600;}
+  .gk-ana .gk-ok{color:var(--brass);}
+  .gk-ana .gk-ok strong{color:var(--navy);}
+  .gk-sag{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:240px;}
+  .gk-et{font-size:10.5px;font-weight:700;border-radius:20px;padding:3px 9px;background:#e2edfb;color:#1d4f8c;white-space:nowrap;}
+  .gk-et.y{background:#eef1f5;color:#384150;}
   .bar-row + .bar-row{margin-top:8px;}
   .bar-track{height:8px;border-radius:5px;background:#eef0f4;overflow:hidden;}
   .bar-fill{height:100%;border-radius:5px;background:var(--navy);}
@@ -388,6 +420,6 @@
 </div>
 <div class="toast" id="toast"></div>
 <script src="donem-ayar.js?v=1"></script>
-<script type="module" src="main.js?v=22"></script>
+<script type="module" src="main.js?v=23"></script>
 </body>
 </html>
