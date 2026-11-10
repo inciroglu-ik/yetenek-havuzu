@@ -351,6 +351,35 @@ let allEvalsMap = {};      // docId -> evaluation doc (tüm dönemler)
 let evaluationsMap = {};   // employeeId -> GÜNCEL (taze) değerlendirme
 let arsivMap = {};         // employeeId -> ARŞİV (eski/içe aktarılan) değerlendirme — sadece admin
 let tazeMap = {};          // employeeId -> yalnız müdürlerin girdiği taze değerlendirme (arşiv hariç) — admin Genel Bakış sayıları
+// Yetenek Havuzu'ndan kalıcı çıkarılan kişiler (ad soyad) — managers/_ayar_donem.haricTutulanlar;
+// "Listeyi Güncelle" bunları İK Sistemi'nden geri eklemez.
+let haricListe = [];
+function haricMi(ad) { const k = nameKey(ad || ""); return haricListe.some((h) => nameKey(h) === k); }
+async function yhCikar(emp) {
+  const k = nameKey(emp.adSoyad || "");
+  const evIds = Object.values(allEvalsMap).filter((ev) => nameKey(ev.adSoyad || "") === k || (emp.id && ev.employeeId === emp.id)).map((ev) => ev.id);
+  const metin = `${emp.adSoyad} Yetenek Havuzu'ndan çıkarılacak:\n\n` +
+    `• ${evIds.length} değerlendirme kaydı KALICI olarak silinecek\n` +
+    `• Personel listesindeki kaydı silinecek\n` +
+    `• "Hariç tutulanlar" listesine eklenecek; personel listesi güncellense de geri gelmez\n\n` +
+    `Silinen değerlendirme kayıtları geri alınamaz. Devam edilsin mi?`;
+  if (!confirm(metin)) return false;
+  const yeniListe = haricMi(emp.adSoyad) ? haricListe.slice() : haricListe.concat([emp.adSoyad]);
+  const batch = writeBatch(db);
+  evIds.forEach((id) => batch.delete(doc(db, "evaluations", id)));
+  if (emp.id) batch.delete(doc(db, "employees", emp.id));
+  batch.set(doc(db, "managers", DONEM_AYAR_ID), { haricTutulanlar: yeniListe, updatedAt: serverTimestamp() }, { merge: true });
+  try { await batch.commit(); }
+  catch (e) { alert("Çıkarılamadı: " + (e.code === "permission-denied" ? "bu işlem için yetkiniz yok." : e.message)); return false; }
+  haricListe = yeniListe;
+  toast(`${emp.adSoyad} Yetenek Havuzu'ndan çıkarıldı (${evIds.length} değerlendirme silindi).`);
+  return true;
+}
+async function haricGeriAl(ad) {
+  const yeniListe = haricListe.filter((h) => nameKey(h) !== nameKey(ad));
+  await setDoc(doc(db, "managers", DONEM_AYAR_ID), { haricTutulanlar: yeniListe, updatedAt: serverTimestamp() }, { merge: true });
+  haricListe = yeniListe;
+}
 // Admin ekran durumu: sekme + liste filtreleri veri yenilense (onSnapshot → render) de korunur
 function admBosFiltre() { return { q: "", mgr: "", dept: "", durum: "", risk: "", ready: "", havuz: "", oneri: "", lider: "", grid: "", gecis: "" }; }
 const ADM = { tab: "overview", f: admBosFiltre(), gelismis: false, sort: { key: "adSoyad", dir: 1 }, kaynak: "guncel",
@@ -556,6 +585,7 @@ async function baslat() {
       const c = cfg.data();
       if (c.aktifDonem) aktifDonem = c.aktifDonem;
       if (Array.isArray(c.donemler) && c.donemler.length) donemList = c.donemler;
+      if (Array.isArray(c.haricTutulanlar)) haricListe = c.haricTutulanlar.slice();
     }
   } catch (e) { console.warn("dönem ayarı okunamadı", e); }
   viewDonem = aktifDonem;
@@ -1240,11 +1270,14 @@ function openAdminDetailDrawer(emp) {
         ${currentProfile.isAdmin && isDuzenlenebilir() ? `<button class="btn btn-brass" id="editFromDetail">Değerlendirmeyi Düzenle</button>` : ""}
         <button class="btn btn-ghost" id="printKarneA4">A4 Karne Yazdır</button>
         <button class="btn btn-ghost" id="downloadPersonExcel">Excel Raporu İndir</button>
+        ${currentProfile.isAdmin && isDuzenlenebilir() ? `<button class="btn btn-danger" id="yhCikarBtn" style="margin-right:auto;order:-1" title="Değerlendirme ve personel kaydını siler; kişi Yetenek Havuzu'ndan çıkar">Yetenek Havuzu'ndan Çıkar</button>` : ""}
       </div>
     </div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
   el("#closeAdminDrawer").onclick = () => overlay.remove();
+  const _cikarBtn = el("#yhCikarBtn");
+  if (_cikarBtn) _cikarBtn.onclick = async () => { _cikarBtn.disabled = true; const ok = await yhCikar(emp); if (ok) overlay.remove(); else _cikarBtn.disabled = false; };
   el("#downloadPersonExcel").onclick = () => exportSinglePersonExcel(emp, ev);
   el("#printKarneA4").onclick = () => karneYazdir([emp]);
   const _editBtn = el("#editFromDetail");
@@ -2480,6 +2513,7 @@ async function rosterHazirla() {
     const unvan = temiz(p.unvan), bolum = temiz(p.bolum), dept = temiz(p.departman);
     if (trFold(unvan).indexOf("STAJYER") >= 0 || trFold(bolum) === "STAJYER") return;
     if (trFold(dept).replace(/[^A-Z0-9]/g, "") === "VI") return;
+    if (haricMi(ad)) return;   // Yetenek Havuzu'ndan kalıcı çıkarılanlar geri eklenmez
     let id = rosterKimlik(ad);
     if (goruldu[id]) { let n = 2; while (goruldu[id + "-" + n]) n++; id = id + "-" + n; }
     goruldu[id] = true;
@@ -2524,11 +2558,28 @@ function openManagePanel() {
           <div class="section-title" style="margin-top:0">Müdürü Eşleşmeyen Personel</div>
           <div id="unassignedList"></div>
         </div>
+        <div class="admin-panel">
+          <div class="section-title" style="margin-top:0">Yetenek Havuzu'ndan Çıkarılanlar</div>
+          <p style="font-size:13px;color:var(--ink-soft)">Kişi kartındaki “Yetenek Havuzu'ndan Çıkar” ile çıkarılan kişiler. Personel listesi güncellense de havuza geri eklenmezler. “Listeye geri al” derseniz bir sonraki <b>Listeyi Güncelle</b>'de yeniden eklenirler (silinen değerlendirmeleri geri gelmez).</p>
+          <div id="haricList" style="font-size:13px"></div>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
   el("#closeMng").onclick = () => overlay.remove();
+  const haricCiz = () => {
+    const kutu = el("#haricList"); if (!kutu) return;
+    kutu.innerHTML = haricListe.length
+      ? haricListe.map((ad) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)"><span>${escH(ad)}</span><button type="button" class="link-btn haric-geri" data-ad="${escH(ad)}">Listeye geri al</button></div>`).join("")
+      : `<span style="color:var(--ink-soft)">Çıkarılan kişi yok.</span>`;
+    kutu.querySelectorAll(".haric-geri").forEach((b) => b.onclick = async () => {
+      if (!confirm(`${b.dataset.ad} hariç tutulanlardan çıkarılacak; bir sonraki "Listeyi Güncelle"de havuza yeniden eklenir. Devam edilsin mi?`)) return;
+      try { await haricGeriAl(b.dataset.ad); haricCiz(); toast("Hariç tutulanlardan çıkarıldı."); }
+      catch (e) { alert("Kaydedilemedi: " + e.message); }
+    });
+  };
+  haricCiz();
 
   // ★ Personel listesi: önce önizle, sonra uygula
   let yeniRoster = null;
