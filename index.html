@@ -278,6 +278,33 @@
   .status-arsiv{background:#eef1f5;color:#4f5868;border:1px dashed #bcc4cf;}
   .ayr-not{color:#8a560d;font-weight:600;}
   .kapsam-tbl tr.ayr-satir td{color:#8a560d;font-weight:600;border-top:1px dashed #e4c99a;}
+  /* Yeni tur: müdür kartında İncele · Düzenle · Yeniden Değerlendir + İlk Analizler sekmesi */
+  .tur-bilgi{background:#eef4fc;border:1px solid #c8d8ee;border-radius:10px;padding:11px 14px;font-size:13px;color:var(--ink);margin:0 0 14px;line-height:1.5;}
+  .tur-bilgi ul{margin:6px 0 0;padding-left:18px;}
+  .tur-bilgi li{margin:2px 0;}
+  .tur-bilgi.yeniden{background:#fff7e8;border-color:#ecd3a3;}
+  .emp-sag{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+  .emp-act{display:inline-flex;gap:6px;flex-wrap:wrap;}
+  .emp-card .main .kayit-not{color:#5d6b7e;}
+  .tur-not{color:#8a560d;font-weight:600;}
+  .tur-et{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:#eef1f5;color:#4f5868;white-space:nowrap;}
+  .tur-et.g{background:#e2edfb;color:var(--navy);}
+  .tur-et.t{background:var(--warn-bg);color:var(--warn);}
+  .ilk-kim-liste{display:flex;flex-wrap:wrap;gap:8px;}
+  .ilk-kim{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 11px;font-family:inherit;font-size:12.5px;color:var(--ink);cursor:pointer;}
+  .ilk-kim b{background:#e2edfb;color:var(--navy);border-radius:12px;padding:1px 8px;font-size:12px;}
+  .ilk-kim small{color:var(--warn);font-weight:600;}
+  .ilk-kim:hover{border-color:#a9bdd8;}
+  .ilk-kim.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .ilk-kim.on b{background:rgba(255,255,255,.18);color:#fff;}
+  #tabIlk .admin-table tbody tr{cursor:pointer;}
+  #tabIlk .admin-table td small{color:var(--ink-soft);}
+  #tabIlk table.admin-table.ilk-tbl{min-width:0 !important;width:100%;}
+  #tabIlk .ilk-tbl td{font-size:11.5px;}
+  #tabIlk .ilk-tbl .tur-et{white-space:normal;font-size:10.5px;}
+  #tabIlk .ilk-tbl th:nth-child(1){width:13%;} #tabIlk .ilk-tbl th:nth-child(2){width:11%;} #tabIlk .ilk-tbl th:nth-child(3),#tabIlk .ilk-tbl th:nth-child(4){width:11%;}
+  #tabIlk .ilk-tbl th:nth-child(5){width:7%;} #tabIlk .ilk-tbl th:nth-child(6){width:10%;} #tabIlk .ilk-tbl th:nth-child(7){width:13%;} #tabIlk .ilk-tbl th:nth-child(8),#tabIlk .ilk-tbl th:nth-child(9){width:7%;} #tabIlk .ilk-tbl th:nth-child(10){width:10%;}
+  @media (max-width:900px){ #tabIlk table.admin-table.ilk-tbl{min-width:900px !important;} }
   .toolbar.gelismis{background:#f6f8fb;border:1px solid var(--line);border-radius:10px;padding:10px;}
   .toolbar.gelismis[hidden]{display:none;}
   .tb-bosluk{flex:1;}
@@ -422,6 +449,6 @@
 </div>
 <div class="toast" id="toast"></div>
 <script src="donem-ayar.js?v=1"></script>
-<script type="module" src="main.js?v=26"></script>
+<script type="module" src="main.js?v=27"></script>
 </body>
 </html>
