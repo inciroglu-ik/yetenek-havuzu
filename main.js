@@ -351,34 +351,40 @@ let allEvalsMap = {};      // docId -> evaluation doc (tüm dönemler)
 let evaluationsMap = {};   // employeeId -> GÜNCEL (taze) değerlendirme
 let arsivMap = {};         // employeeId -> ARŞİV (eski/içe aktarılan) değerlendirme — sadece admin
 let tazeMap = {};          // employeeId -> yalnız müdürlerin girdiği taze değerlendirme (arşiv hariç) — admin Genel Bakış sayıları
-// Yetenek Havuzu'ndan kalıcı çıkarılan kişiler (ad soyad) — managers/_ayar_donem.haricTutulanlar;
-// "Listeyi Güncelle" bunları İK Sistemi'nden geri eklemez.
-let haricListe = [];
-function haricMi(ad) { const k = nameKey(ad || ""); return haricListe.some((h) => nameKey(h) === k); }
-async function yhCikar(emp) {
+// Kişinin GÜNCEL değerlendirme kayıtlarını sil (ör. deneme kayıtları). Kişi personel listesinde kalır ve
+// "Bekliyor" görünür — müdürü hiç başlamamış gibi. İlk değerlendirme arşivi korunur.
+async function degerlendirmeKayitlariniSil(emp) {
   const k = nameKey(emp.adSoyad || "");
-  const evIds = Object.values(allEvalsMap).filter((ev) => nameKey(ev.adSoyad || "") === k || (emp.id && ev.employeeId === emp.id)).map((ev) => ev.id);
-  const metin = `${emp.adSoyad} Yetenek Havuzu'ndan çıkarılacak:\n\n` +
-    `• ${evIds.length} değerlendirme kaydı KALICI olarak silinecek\n` +
-    `• Personel listesindeki kaydı silinecek\n` +
-    `• "Hariç tutulanlar" listesine eklenecek; personel listesi güncellense de geri gelmez\n\n` +
-    `Silinen değerlendirme kayıtları geri alınamaz. Devam edilsin mi?`;
+  const evIds = Object.values(allEvalsMap).filter((ev) => !evalArsivMi(ev) && (nameKey(ev.adSoyad || "") === k || (emp.id && ev.employeeId === emp.id))).map((ev) => ev.id);
+  if (!evIds.length) { toast("Bu kişinin silinecek güncel değerlendirme kaydı yok."); return false; }
+  const metin = `${emp.adSoyad} için ${evIds.length} güncel değerlendirme kaydı KALICI olarak silinecek.\n\n` +
+    `Kişi personel listesinde kalır ve "Bekliyor" görünür (müdürü hiç başlamamış gibi). İlk değerlendirme arşivi korunur.\n\n` +
+    `Silinen kayıtlar geri alınamaz. Devam edilsin mi?`;
   if (!confirm(metin)) return false;
-  const yeniListe = haricMi(emp.adSoyad) ? haricListe.slice() : haricListe.concat([emp.adSoyad]);
   const batch = writeBatch(db);
   evIds.forEach((id) => batch.delete(doc(db, "evaluations", id)));
-  if (emp.id) batch.delete(doc(db, "employees", emp.id));
-  batch.set(doc(db, "managers", DONEM_AYAR_ID), { haricTutulanlar: yeniListe, updatedAt: serverTimestamp() }, { merge: true });
   try { await batch.commit(); }
-  catch (e) { alert("Çıkarılamadı: " + (e.code === "permission-denied" ? "bu işlem için yetkiniz yok." : e.message)); return false; }
-  haricListe = yeniListe;
-  toast(`${emp.adSoyad} Yetenek Havuzu'ndan çıkarıldı (${evIds.length} değerlendirme silindi).`);
+  catch (e) { alert("Silinemedi: " + (e.code === "permission-denied" ? "bu işlem için yetkiniz yok." : e.message)); return false; }
+  toast(`${emp.adSoyad}: ${evIds.length} değerlendirme kaydı silindi; durumu artık "Bekliyor".`);
   return true;
 }
-async function haricGeriAl(ad) {
-  const yeniListe = haricListe.filter((h) => nameKey(h) !== nameKey(ad));
-  await setDoc(doc(db, "managers", DONEM_AYAR_ID), { haricTutulanlar: yeniListe, updatedAt: serverTimestamp() }, { merge: true });
-  haricListe = yeniListe;
+// ONARIM (10.11.2026): kısa süre canlıda kalan eski "havuzdan çıkar" sürümü personel kaydını da silip adı
+// managers/_ayar_donem.haricTutulanlar'a yazıyordu. Yönetim panelindeki onarım bu kişileri İK Sistemi kaydından
+// NORMAL çalışan olarak geri yükler ve listeyi boşaltır.
+let haricListe = [];
+async function personelGeriYukle(adlar) {
+  const roster = await rosterHazirla();
+  const istenen = new Set(adlar.map((a) => nameKey(a)));
+  const bulunan = roster.filter((e) => istenen.has(nameKey(e.adSoyad)));
+  if (!bulunan.length) throw new Error("Bu kişiler İK Sistemi'nin aktif personel listesinde bulunamadı.");
+  const bulunanK = new Set(bulunan.map((e) => nameKey(e.adSoyad)));
+  const kalan = haricListe.filter((ad) => !bulunanK.has(nameKey(ad)));
+  const batch = writeBatch(db);
+  bulunan.forEach((e) => batch.set(doc(db, "employees", e.id), e));
+  batch.set(doc(db, "managers", DONEM_AYAR_ID), { haricTutulanlar: kalan, updatedAt: serverTimestamp() }, { merge: true });
+  await batch.commit();
+  haricListe = kalan;
+  return bulunan.map((e) => e.adSoyad);
 }
 // Admin ekran durumu: sekme + liste filtreleri veri yenilense (onSnapshot → render) de korunur
 function admBosFiltre() { return { q: "", mgr: "", dept: "", durum: "", risk: "", ready: "", havuz: "", oneri: "", lider: "", grid: "", gecis: "" }; }
@@ -1270,14 +1276,14 @@ function openAdminDetailDrawer(emp) {
         ${currentProfile.isAdmin && isDuzenlenebilir() ? `<button class="btn btn-brass" id="editFromDetail">Değerlendirmeyi Düzenle</button>` : ""}
         <button class="btn btn-ghost" id="printKarneA4">A4 Karne Yazdır</button>
         <button class="btn btn-ghost" id="downloadPersonExcel">Excel Raporu İndir</button>
-        ${currentProfile.isAdmin && isDuzenlenebilir() ? `<button class="btn btn-danger" id="yhCikarBtn" style="margin-right:auto;order:-1" title="Değerlendirme ve personel kaydını siler; kişi Yetenek Havuzu'ndan çıkar">Yetenek Havuzu'ndan Çıkar</button>` : ""}
+        ${currentProfile.isAdmin && isDuzenlenebilir() && tazeMap[emp.id] ? `<button class="btn btn-danger" id="yhCikarBtn" style="margin-right:auto;order:-1" title="Güncel değerlendirme kayıtlarını siler; kişi listede kalır ve Bekliyor görünür">Değerlendirme Kayıtlarını Sil</button>` : ""}
       </div>
     </div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
   el("#closeAdminDrawer").onclick = () => overlay.remove();
   const _cikarBtn = el("#yhCikarBtn");
-  if (_cikarBtn) _cikarBtn.onclick = async () => { _cikarBtn.disabled = true; const ok = await yhCikar(emp); if (ok) overlay.remove(); else _cikarBtn.disabled = false; };
+  if (_cikarBtn) _cikarBtn.onclick = async () => { _cikarBtn.disabled = true; const ok = await degerlendirmeKayitlariniSil(emp); if (ok) overlay.remove(); else _cikarBtn.disabled = false; };
   el("#downloadPersonExcel").onclick = () => exportSinglePersonExcel(emp, ev);
   el("#printKarneA4").onclick = () => karneYazdir([emp]);
   const _editBtn = el("#editFromDetail");
@@ -2513,7 +2519,6 @@ async function rosterHazirla() {
     const unvan = temiz(p.unvan), bolum = temiz(p.bolum), dept = temiz(p.departman);
     if (trFold(unvan).indexOf("STAJYER") >= 0 || trFold(bolum) === "STAJYER") return;
     if (trFold(dept).replace(/[^A-Z0-9]/g, "") === "VI") return;
-    if (haricMi(ad)) return;   // Yetenek Havuzu'ndan kalıcı çıkarılanlar geri eklenmez
     let id = rosterKimlik(ad);
     if (goruldu[id]) { let n = 2; while (goruldu[id + "-" + n]) n++; id = id + "-" + n; }
     goruldu[id] = true;
@@ -2558,28 +2563,37 @@ function openManagePanel() {
           <div class="section-title" style="margin-top:0">Müdürü Eşleşmeyen Personel</div>
           <div id="unassignedList"></div>
         </div>
-        <div class="admin-panel">
-          <div class="section-title" style="margin-top:0">Yetenek Havuzu'ndan Çıkarılanlar</div>
-          <p style="font-size:13px;color:var(--ink-soft)">Kişi kartındaki “Yetenek Havuzu'ndan Çıkar” ile çıkarılan kişiler. Personel listesi güncellense de havuza geri eklenmezler. “Listeye geri al” derseniz bir sonraki <b>Listeyi Güncelle</b>'de yeniden eklenirler (silinen değerlendirmeleri geri gelmez).</p>
-          <div id="haricList" style="font-size:13px"></div>
-        </div>
+        <div id="haricOnarim"></div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
   el("#closeMng").onclick = () => overlay.remove();
-  const haricCiz = () => {
-    const kutu = el("#haricList"); if (!kutu) return;
-    kutu.innerHTML = haricListe.length
-      ? haricListe.map((ad) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)"><span>${escH(ad)}</span><button type="button" class="link-btn haric-geri" data-ad="${escH(ad)}">Listeye geri al</button></div>`).join("")
-      : `<span style="color:var(--ink-soft)">Çıkarılan kişi yok.</span>`;
-    kutu.querySelectorAll(".haric-geri").forEach((b) => b.onclick = async () => {
-      if (!confirm(`${b.dataset.ad} hariç tutulanlardan çıkarılacak; bir sonraki "Listeyi Güncelle"de havuza yeniden eklenir. Devam edilsin mi?`)) return;
-      try { await haricGeriAl(b.dataset.ad); haricCiz(); toast("Hariç tutulanlardan çıkarıldı."); }
-      catch (e) { alert("Kaydedilemedi: " + e.message); }
-    });
+  // ONARIM: eski "havuzdan çıkar" sürümüyle personel kaydı silinmiş kişiler (yalnız varsa görünür)
+  const onarimCiz = () => {
+    const kutu = el("#haricOnarim"); if (!kutu) return;
+    if (!haricListe.length) { kutu.innerHTML = ""; return; }
+    kutu.innerHTML = `<div class="admin-panel" style="border:1.5px solid var(--warn);background:var(--warn-bg)">
+      <div class="section-title" style="margin-top:0">Onarım · Silinen Personel Kayıtları</div>
+      <p style="font-size:13px;color:var(--ink)">Şu kişilerin personel kaydı önceki bir işlemde yanlışlıkla silindi: <b>${haricListe.map(escH).join(", ")}</b>. “Geri yükle” bilgilerini İK Sistemi'nden alır; kişiler <b>normal çalışan</b> olarak listeye döner, toplam personele sayılır ve değerlendirmeleri olmadığı için <b>Bekliyor</b> görünür.</p>
+      <button type="button" class="btn btn-brass btn-sm" id="onarimBtn">Personel kayıtlarını geri yükle (${haricListe.length})</button>
+      <div id="onarimMsg" style="font-size:12.5px;margin-top:8px"></div>
+    </div>`;
+    el("#onarimBtn").onclick = async () => {
+      const b = el("#onarimBtn"), msg = el("#onarimMsg");
+      b.disabled = true; b.textContent = "Geri yükleniyor…";
+      try {
+        const eklenen = await personelGeriYukle(haricListe.slice());
+        toast(`${eklenen.length} kişi personel listesine geri eklendi.`);
+        msg.style.color = "var(--good)"; msg.textContent = "✓ Geri yüklendi: " + eklenen.join(", ");
+        setTimeout(onarimCiz, 1500);
+      } catch (e) {
+        msg.style.color = "var(--bad)"; msg.textContent = "Hata: " + (e.code === "permission-denied" ? "bu işlem için yetkiniz yok." : e.message);
+        b.disabled = false; b.textContent = `Personel kayıtlarını geri yükle (${haricListe.length})`;
+      }
+    };
   };
-  haricCiz();
+  onarimCiz();
 
   // ★ Personel listesi: önce önizle, sonra uygula
   let yeniRoster = null;
