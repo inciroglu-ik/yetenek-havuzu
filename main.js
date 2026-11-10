@@ -1849,97 +1849,278 @@ function loadJsPDF() {
   return _jspdfLoadPromise;
 }
 
+// PDF yazı tipi: jsPDF'in yerleşik helvetica'sı Türkçe harf (ğ ı ş İ) basamıyor — harfler bozuluyor, metin harf harf
+// açılıyordu. Panelle aynı Inter (TTF) indirilip PDF'e gömülür.
+const PDF_FONT_URL = {
+  normal: "https://cdn.jsdelivr.net/npm/@expo-google-fonts/inter@0.2.3/Inter_400Regular.ttf",
+  bold: "https://cdn.jsdelivr.net/npm/@expo-google-fonts/inter@0.2.3/Inter_700Bold.ttf"
+};
+let _pdfFontB64 = null;
+async function pdfFontYukle() {
+  if (_pdfFontB64) return _pdfFontB64;
+  const indir = async (url) => {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("PDF yazı tipi indirilemedi (" + r.status + "). İnternet bağlantınızı kontrol edin.");
+    const u8 = new Uint8Array(await r.arrayBuffer());
+    let s = "";
+    for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s);
+  };
+  const [normal, bold] = await Promise.all([indir(PDF_FONT_URL.normal), indir(PDF_FONT_URL.bold)]);
+  _pdfFontB64 = { normal, bold };
+  return _pdfFontB64;
+}
+
+// YÖNETİCİ ÖZETİ (A4): durum kartları + değerlendirilebilir personel çubuğu · yetenek göstergeleri + ayrılma riski ·
+// 9-Grid matrisi · kritik risk · müdürlere göre tamamlama · departmanlara göre tamamlama · okuma notları.
+// Sayılar Genel Bakış ile birebir aynı kaynaktan (ctx = renderAdmin hesapları).
 async function downloadExecutivePdf(ctx) {
   const btn = document.getElementById("printSummary");
+  const btnMetin = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "Hazırlanıyor…"; }
   try {
-    await loadJsPDF();
+    const [, font] = await Promise.all([loadJsPDF(), pdfFontYukle()]);
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: "mm", format: "a4" });
-    const NAVY = [35, 48, 71], BRASS = [169, 119, 44], INK = [28, 37, 48], INKSOFT = [74, 86, 104], LINE = [226, 221, 210];
-    const W = 210, M = 16;
+    pdf.addFileToVFS("Inter-Regular.ttf", font.normal); pdf.addFont("Inter-Regular.ttf", "Inter", "normal");
+    pdf.addFileToVFS("Inter-Bold.ttf", font.bold); pdf.addFont("Inter-Bold.ttf", "Inter", "bold");
+    pdf.setFont("Inter", "normal");
+
+    const NAVY = [19, 42, 70], BLUE = [37, 99, 171], INK = [28, 37, 48], SOFT = [93, 107, 126], LINE = [222, 227, 235],
+      PAPER = [244, 246, 250], AMBER = [181, 120, 20], RED = [178, 48, 40], GRI = [203, 209, 218], BEYAZ = [255, 255, 255], ACIK = [196, 210, 230];
+    const W = 210, H = 297, M = 16, IW = W - 2 * M, ALT = H - 16;
+    const tarih = new Date().toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" });
+    const yuzde = (a, b) => (b ? Math.round(a / b * 100) : 0);
+    const hexRgb = (h) => { const n = parseInt(String(h).replace("#", ""), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+    const karistir = (c, t) => c.map((v) => Math.round(255 + (v - 255) * t));
     let y = 0;
 
-    function header() {
-      pdf.setFillColor(...NAVY); pdf.rect(0, 0, W, 26, "F");
-      pdf.setTextColor(255, 255, 255); pdf.setFont("helvetica", "bold"); pdf.setFontSize(15);
-      pdf.text("Yetenek Havuzu Değerlendirme — Yönetici Özeti", M, 14);
-      pdf.setFont("helvetica", "normal"); pdf.setFontSize(9); pdf.setTextColor(220, 224, 232);
-      pdf.text(`İnciroğlu Otomotiv · İnsan Kaynakları · ${new Date().toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" })}`, M, 21);
-      y = 34;
+    function yaz(t, x, yy, o) {
+      o = o || {};
+      pdf.setFont("Inter", o.bold ? "bold" : "normal"); pdf.setFontSize(o.size || 9); pdf.setTextColor(...(o.color || INK));
+      let metin = Array.isArray(t) ? t : String(t == null ? "" : t);
+      if (o.kes && !Array.isArray(metin)) { if (pdf.getTextWidth(metin) > o.kes) { while (metin.length > 1 && pdf.getTextWidth(metin + "…") > o.kes) metin = metin.slice(0, -1); metin += "…"; } }
+      const sec = {};
+      if (o.align) sec.align = o.align;
+      if (o.maxWidth) sec.maxWidth = o.maxWidth;
+      pdf.text(metin, x, yy, sec);
     }
-    function sectionTitle(t) {
-      if (y > 262) { pdf.addPage(); y = 20; }
-      pdf.setFillColor(...BRASS); pdf.rect(M, y, W - 2 * M, 7, "F");
-      pdf.setTextColor(255, 255, 255); pdf.setFont("helvetica", "bold"); pdf.setFontSize(10);
-      pdf.text(t.toUpperCase(), M + 3, y + 5);
-      y += 12;
+    function sayfaBasi(ilk) {
+      if (ilk) {
+        pdf.setFillColor(...NAVY); pdf.rect(0, 0, W, 30, "F");
+        pdf.setFillColor(...BLUE); pdf.rect(0, 30, W, 1.2, "F");
+        yaz("Yetenek Havuzu Değerlendirmesi", M, 14.5, { bold: true, size: 18, color: BEYAZ });
+        yaz("Yönetici Özeti · " + (ctx.donem || "") + " dönemi", M, 22.5, { size: 10.5, color: ACIK });
+        yaz("İnciroğlu Otomotiv · İnsan Kaynakları", W - M, 14.5, { size: 8.5, color: ACIK, align: "right" });
+        yaz(tarih, W - M, 22.5, { size: 8.5, color: ACIK, align: "right" });
+        y = 41;
+      } else {
+        pdf.addPage();
+        pdf.setFillColor(...NAVY); pdf.rect(0, 0, W, 12, "F");
+        yaz("Yetenek Havuzu Değerlendirmesi · Yönetici Özeti", M, 7.9, { bold: true, size: 9, color: BEYAZ });
+        yaz(tarih, W - M, 7.9, { size: 8, color: ACIK, align: "right" });
+        y = 23;
+      }
     }
-    function statTile(x, val, label, w) {
-      pdf.setDrawColor(...LINE); pdf.setFillColor(255, 255, 255);
-      pdf.roundedRect(x, y, w, 18, 2, 2, "FD");
-      pdf.setFont("helvetica", "normal"); pdf.setFontSize(7);
-      // helvetica ğ/ı/ş/İ basamaz (harfler bozulup kutudan taşar) → kutu etiketinde sadeleştir
-      const sade = String(label).replace(/[ğĞıİşŞ]/g, (c) => ({ "ğ": "g", "Ğ": "G", "ı": "i", "İ": "I", "ş": "s", "Ş": "S" }[c]));
-      const satirlar = pdf.splitTextToSize(sade, w - 8).slice(0, 2);
-      const iki = satirlar.length > 1;
-      pdf.setTextColor(...NAVY); pdf.setFont("helvetica", "bold"); pdf.setFontSize(15);
-      pdf.text(String(val), x + 4, y + (iki ? 8 : 9));
-      pdf.setTextColor(...INKSOFT); pdf.setFont("helvetica", "normal"); pdf.setFontSize(7);
-      pdf.text(satirlar, x + 4, y + (iki ? 12.6 : 15));
+    function yerVar(h) { if (y + h > ALT) sayfaBasi(false); }
+    function bolum(baslik, alt, enAz) {
+      yerVar((enAz || 0) + (alt ? 14 : 9));
+      yaz(baslik, M, y, { bold: true, size: 11.5, color: NAVY });
+      pdf.setDrawColor(...BLUE); pdf.setLineWidth(0.7); pdf.line(M, y + 2.2, M + 16, y + 2.2); pdf.setLineWidth(0.2);
+      y += 7;
+      if (alt) { yaz(alt, M, y, { size: 8, color: SOFT, kes: IW }); y += 5.5; }
     }
-    function tableRow(cols, widths, opts) {
-      opts = opts || {};
-      const rh = opts.h || 6.4;
-      if (y + rh > 285) { pdf.addPage(); y = 20; }
-      if (opts.shade) { pdf.setFillColor(246, 245, 241); pdf.rect(M, y, W - 2 * M, rh, "F"); }
-      pdf.setTextColor(...INK); pdf.setFont("helvetica", opts.bold ? "bold" : "normal"); pdf.setFontSize(8.3);
-      let x = M + 2;
-      cols.forEach((c, i) => { pdf.text(String(c), x, y + rh - 2, { maxWidth: widths[i] - 3 }); x += widths[i]; });
-      pdf.setDrawColor(...LINE); pdf.line(M, y + rh, W - M, y + rh);
-      y += rh;
+    function kutu(x, w, h, deger, etiket, not, vurgu) {
+      pdf.setDrawColor(...LINE); pdf.setFillColor(...(vurgu ? [236, 243, 252] : BEYAZ)); pdf.roundedRect(x, y, w, h, 1.8, 1.8, "FD");
+      if (vurgu) { pdf.setFillColor(...BLUE); pdf.rect(x, y + 2, 1.2, h - 4, "F"); }
+      yaz(etiket, x + 4, y + 6, { bold: true, size: 7.2, color: SOFT, kes: w - 7 });
+      yaz(deger, x + 4, y + 15.2, { bold: true, size: 17, color: NAVY });
+      if (not) yaz(not, x + 4, y + h - 3.4, { size: 6.9, color: SOFT, kes: w - 7 });
     }
+    function kutuSatiri(liste, h) {
+      const ara = 3.5, w = (IW - ara * (liste.length - 1)) / liste.length;
+      liste.forEach((k, i) => kutu(M + i * (w + ara), w, h, k[0], k[1], k[2], k[3]));
+      y += h + 5;
+    }
+    // Yığılmış yatay çubuk + lejant
+    function cubuk(parcalar, toplam, baslik) {
+      yerVar(16);
+      if (baslik) { yaz(baslik, M, y, { bold: true, size: 8, color: INK }); y += 3; }
+      const h = 5.2; let x = M;
+      pdf.setFillColor(...PAPER); pdf.roundedRect(M, y, IW, h, 1.2, 1.2, "F");
+      parcalar.forEach((p) => { if (!p.n || !toplam) return; const w = IW * p.n / toplam; pdf.setFillColor(...p.renk); pdf.rect(x, y, w, h, "F"); x += w; });
+      y += h + 4.6;
+      let lx = M;
+      parcalar.forEach((p) => {
+        pdf.setFillColor(...p.renk); pdf.roundedRect(lx, y - 2.6, 2.8, 2.8, 0.6, 0.6, "F");
+        const t = `${p.ad} ${p.n}${toplam ? ` (%${yuzde(p.n, toplam)})` : ""}`;
+        yaz(t, lx + 4, y, { size: 7.8, color: INK });
+        pdf.setFont("Inter", "normal"); pdf.setFontSize(7.8); lx += pdf.getTextWidth(t) + 11;
+      });
+      y += 6;
+    }
+    function tablo(basliklar, gen, satirlar, sag) {
+      const rh = 6.6;
+      sag = sag || [];
+      const basCiz = () => {
+        pdf.setFillColor(...PAPER); pdf.rect(M, y, IW, rh, "F");
+        let x = M + 2;
+        basliklar.forEach((b, i) => { const s = sag.includes(i); yaz(b, s ? x + gen[i] - 5 : x, y + 4.4, { bold: true, size: 7.2, color: SOFT, align: s ? "right" : undefined }); x += gen[i]; });
+        y += rh;
+      };
+      yerVar(rh * 3); basCiz();
+      satirlar.forEach((s) => {
+        if (y + rh > ALT) { sayfaBasi(false); basCiz(); }
+        let x = M + 2;
+        s.forEach((c, i) => {
+          const h = (c && typeof c === "object") ? c : { t: c };
+          if (h.oran != null) {
+            const bw = gen[i] - 21;
+            pdf.setFillColor(232, 236, 242); pdf.roundedRect(x, y + 2.3, bw, 2.2, 1.1, 1.1, "F");
+            if (h.oran > 0) { pdf.setFillColor(...h.renk); pdf.roundedRect(x, y + 2.3, Math.max(2.2, bw * Math.min(1, h.oran)), 2.2, 1.1, 1.1, "F"); }
+            yaz(h.t, x + bw + 2.5, y + 4.6, { bold: true, size: 7.6, color: h.renk });
+          } else {
+            const sg = sag.includes(i);
+            yaz(h.t, sg ? x + gen[i] - 5 : x, y + 4.6, { bold: !!h.bold, size: h.size || 8, color: h.renk || INK, align: sg ? "right" : undefined, kes: sg ? undefined : gen[i] - 3 });
+          }
+          x += gen[i];
+        });
+        pdf.setDrawColor(...LINE); pdf.setLineWidth(0.2); pdf.line(M, y + rh, M + IW, y + rh);
+        y += rh;
+      });
+    }
+    const oranRenk = (r) => (r >= 1 ? BLUE : r > 0 ? AMBER : RED);
 
-    header();
-    // 1. satır 5 kutu (Toplam · Değerlendirme Dışı · Tamamlandı · Taslak · Bekliyor), 2. satır 4 kutu
-    const statRows = [
-      [[ctx.total, "Toplam Personel"], [ctx.disi, "Değerlendirme Dışı (6 Ay Altı Kıdem)"], [ctx.done, "Tamamlandı"], [ctx.draft, "Taslak"], [ctx.bekliyor, "Bekliyor"]],
-      [[ctx.havuzEvet, "Yetenek Havuzuna Alınmalı"], [ctx.liderlikVar, "Liderlik Potansiyeli"], [ctx.fonksiyonelEvet, "Fonksiyonel Geçişe Uygun"], [ctx.kritikRisk.length, "Kritik Risk"]]
-    ];
-    statRows.forEach((satir, ri) => {
-      const tileW = (W - 2 * M - (satir.length - 1) * 4) / satir.length;
-      let sx = M;
-      satir.forEach((s) => { statTile(sx, s[0], s[1], tileW); sx += tileW + 4; });
-      if (ri === 0) y += 22;
+    // ================= 1. SAYFA =================
+    sayfaBasi(true);
+    const degerlendirilebilir = ctx.degerlendirilebilir;
+    bolum("Değerlendirme Durumu", `Bugünkü personel listesi (${ctx.total} çalışan) · son değerlendirme girişi ${ctx.sonTarihMetni}`);
+    kutuSatiri([
+      [ctx.total, "Toplam Personel", "çalışan listesi"],
+      [ctx.disi, "Değerlendirme Dışı", "6 ay altı kıdem"],
+      [ctx.done, "Tamamlandı", `%${ctx.oranTamam} · ${degerlendirilebilir} kişiden`, true],
+      [ctx.draft, "Taslak", "tamamlanmadı"],
+      [ctx.bekliyor, "Bekliyor", "başlanmadı"]
+    ], 22);
+    cubuk([{ ad: "Tamamlandı", n: ctx.done, renk: BLUE }, { ad: "Taslak", n: ctx.draft, renk: AMBER }, { ad: "Bekliyor", n: ctx.bekliyor, renk: GRI }],
+      degerlendirilebilir, `Değerlendirilebilir ${degerlendirilebilir} çalışan (6 ay altı kıdem hariç)`);
+    const mg = ctx.mgrIlerleme || [];
+    const basladi = mg.filter((m) => m.doneCount > 0).length, bitirdi = mg.filter((m) => m.total > 0 && m.doneCount >= m.total).length;
+    const paragraf = (t, renk) => {
+      pdf.setFont("Inter", "normal"); pdf.setFontSize(8.2);
+      const satirlar = pdf.splitTextToSize(t, IW);
+      yaz(satirlar, M, y, { size: 8.2, color: renk });
+      y += satirlar.length * 3.7 + 1.5;
+    };
+    paragraf(`Ekibi olan ${mg.length} müdürden ${basladi} müdür en az bir değerlendirmeyi tamamladı; ${bitirdi} müdür ekibinin tamamını değerlendirdi, ${mg.length - basladi} müdür henüz başlamadı.`, INK);
+    if (ctx.ayrTamamSay) paragraf(`Ayrıca sonradan işten ayrılan ${ctx.ayrTamamSay} çalışanın değerlendirmesi tamamlanmıştır (ilk günden bugüne ${ctx.done + ctx.ayrTamamSay}); bu kişiler oranlara dahil değildir.`, SOFT);
+    y += 6;
+
+    bolum("Yetenek Göstergeleri", `Tamamlanan ${ctx.done} değerlendirme üzerinden (taslaklar ve ilk tur Excel arşivi dahil değil)`);
+    kutuSatiri([
+      [ctx.havuzEvet, "Yetenek Havuzuna Alınmalı", `%${yuzde(ctx.havuzEvet, ctx.done)} · müdür görüşü`],
+      [ctx.liderlikVar, "Liderlik Potansiyeli Var", `%${yuzde(ctx.liderlikVar, ctx.done)}`],
+      [ctx.fonksiyonelEvet, "Fonksiyonel Geçişe Uygun", `%${yuzde(ctx.fonksiyonelEvet, ctx.done)}`],
+      [ctx.kritikRisk.length, "Kritik Risk", "havuzda · ayrılma riski yüksek", ctx.kritikRisk.length > 0]
+    ], 22);
+    const rk = ctx.riskTamam || { "Düşük": 0, "Orta": 0, "Yüksek": 0 };
+    const riskToplam = rk["Düşük"] + rk["Orta"] + rk["Yüksek"];
+    cubuk([{ ad: "Düşük", n: rk["Düşük"], renk: BLUE }, { ad: "Orta", n: rk["Orta"], renk: AMBER }, { ad: "Yüksek", n: rk["Yüksek"], renk: RED }],
+      riskToplam, `Ayrılma riski (${riskToplam} değerlendirmede girilmiş)`);
+    y += 3;
+
+    // 9-Grid matrisi: satır = liderlik potansiyeli (yüksek üstte), sütun = performans (düşük solda)
+    bolum("9-Grid Dağılımı", `Liderlik potansiyeli × performans · ${ctx.yerlesenSayi} tamamlanan değerlendirme yerleşti`, 68);
+    const etW = 22, hw = (IW - etW) / 3, hh = 17.5;
+    const enCok = Math.max(1, ...ctx.box9.map((c) => c.list.length));
+    yaz("LİDERLİK POTANSİYELİ", M, y + 1, { bold: true, size: 6.4, color: SOFT });
+    y += 3;
+    [2, 1, 0].forEach((pot, r) => {
+      const ry = y + r * hh;
+      yaz(POT_ETIKET[pot], M, ry + hh / 2 + 1.2, { bold: true, size: 8.2, color: NAVY });
+      [0, 1, 2].forEach((perf, c) => {
+        const h = ctx.box9.find((b) => b.pot === pot && b.perf === perf);
+        const n = h ? h.list.length : 0;
+        const t = n ? 0.16 + 0.62 * n / enCok : 0.05;
+        const renk = hexRgb(h.cell.renk), zemin = karistir(renk, t), koyu = t > 0.5;
+        const cx = M + etW + c * hw;
+        pdf.setFillColor(...zemin); pdf.setDrawColor(...BEYAZ); pdf.setLineWidth(0.8); pdf.rect(cx, ry, hw, hh, "FD"); pdf.setLineWidth(0.2);
+        yaz(String(n), cx + 4, ry + 8.2, { bold: true, size: 15, color: koyu ? BEYAZ : NAVY });
+        if (n && ctx.yerlesenSayi) yaz(`%${yuzde(n, ctx.yerlesenSayi)}`, cx + hw - 4, ry + 7.6, { size: 7.4, color: koyu ? BEYAZ : SOFT, align: "right" });
+        pdf.setFont("Inter", "bold"); pdf.setFontSize(6.6);
+        const bs = pdf.splitTextToSize(h.cell.baslik, hw - 8).slice(0, 2);
+        yaz(bs, cx + 4, ry + hh - (bs.length > 1 ? 6.4 : 4), { bold: true, size: 6.6, color: koyu ? BEYAZ : INK });
+      });
     });
-    y += 26;
+    y += 3 * hh + 4;
+    [0, 1, 2].forEach((perf, c) => yaz(PERF_ETIKET[perf], M + etW + c * hw + hw / 2, y, { bold: true, size: 7.8, color: NAVY, align: "center" }));
+    y += 4;
+    yaz("PERFORMANS", M + etW + 1.5 * hw, y, { bold: true, size: 6.4, color: SOFT, align: "center" });
+    y += 9;
 
-    sectionTitle("Departman Dağılımı");
-    const dW = [(W - 2 * M) * 0.7, (W - 2 * M) * 0.3];
-    tableRow(["Departman", "Personel Sayısı"], dW, { bold: true });
-    ctx.deptData.forEach((d, i) => tableRow([d.label, d.value], dW, { shade: i % 2 === 1 }));
-    y += 6;
-
-    sectionTitle("9-Grid (Performans × Liderlik Potansiyeli)");
-    const bW = [(W - 2 * M) * 0.30, (W - 2 * M) * 0.24, (W - 2 * M) * 0.28, (W - 2 * M) * 0.18];
-    tableRow(["Grup", "Liderlik Pot.", "Performans", "Kişi"], bW, { bold: true });
-    ctx.box9.forEach((c, i) => tableRow([c.cell.baslik, POT_ETIKET[c.pot], PERF_ETIKET[c.perf], c.list.length], bW, { shade: i % 2 === 1 }));
-    y += 6;
-
-    sectionTitle("Kritik Risk — Havuzda ve Ayrılma Riski Yüksek");
-    const kW = [(W - 2 * M) * 0.32, (W - 2 * M) * 0.28, (W - 2 * M) * 0.28, (W - 2 * M) * 0.12];
-    tableRow(["Ad Soyad", "Departman", "Müdür", "Hazır Olma"], kW, { bold: true });
+    bolum("Kritik Risk", "Müdürün “yetenek havuzuna alınmalı” dediği ve ayrılma riskini “Yüksek” girdiği çalışanlar", 20);
     if (ctx.kritikRisk.length) {
-      ctx.kritikRisk.forEach((e) => tableRow([e.adSoyad, e.departman || "", e.muduluk || "Atanmadı", ctx.evaluationsMap[e.id]?.hazirOlmaSuresi || "—"], kW, { shade: true }));
+      tablo(["Ad Soyad", "Unvan · Departman", "Müdür", "Hazır Olma"], [48, 54, 50, 26],
+        ctx.kritikRisk.map((e) => [{ t: e.adSoyad, bold: true }, [e.mevcutUnvan, e.departman].filter(Boolean).join(" · "), e.muduluk || "Atanmadı", ctx.evaluationsMap[e.id]?.hazirOlmaSuresi || "—"]));
     } else {
-      tableRow(["Kritere uyan personel yok.", "", "", ""], kW, {});
+      yaz("Kritere uyan çalışan yok.", M, y + 3, { size: 8.5, color: SOFT }); y += 8;
+    }
+    y += 10;
+
+    // ================= MÜDÜRLER + DEPARTMANLAR =================
+    bolum("Müdürlere Göre Tamamlama", "Değerlendirilecek = müdürün ekibi (6 ay altı kıdem hariç) · oran yüksekten düşüğe", 30);
+    const mSatir = mg.slice().sort((a, b) => (b.rate || 0) - (a.rate || 0) || b.total - a.total || a.name.localeCompare(b.name, "tr"));
+    tablo(["Müdür", "Departman", "Değerlendirilecek", "Tamamlanan", "Oran"], [54, 34, 28, 24, 38],
+      mSatir.map((m) => {
+        const r = m.rate || 0;
+        return [{ t: m.name, bold: true }, m.dept || "—", m.total, m.doneCount + (m.ayrDone ? ` (+${m.ayrDone})` : ""),
+          { oran: r, t: m.doneCount ? `%${Math.round(r * 100)}` : "Başlamadı", renk: oranRenk(r) }];
+      }), [2, 3]);
+    if (mg.some((m) => m.ayrDone)) { y += 4; yaz("(+N): müdürün değerlendirdiği ve sonradan işten ayrılan çalışan sayısı; orana dahil değildir.", M, y, { size: 7.4, color: SOFT }); y += 2; }
+    y += 8;
+
+    const dep = new Map();
+    (ctx.roster || []).forEach((e) => {
+      const k = e.departman || "Belirtilmemiş";
+      const o = dep.get(k) || { ad: k, personel: 0, deg: 0, tamam: 0 };
+      o.personel++; if (!kidemDisi(e)) o.deg++; if (ctx.tamamEv(e)) o.tamam++;
+      dep.set(k, o);
+    });
+    const depSatir = [...dep.values()].sort((a, b) => b.personel - a.personel || a.ad.localeCompare(b.ad, "tr"));
+    bolum("Departmanlara Göre Dağılım ve Tamamlama", `${depSatir.length} departman · personel sayısına göre`, 30);
+    tablo(["Departman", "Personel", "Değerlendirilebilir", "Tamamlanan", "Oran"], [58, 24, 30, 26, 40],
+      depSatir.map((d) => { const r = d.deg ? Math.min(1, d.tamam / d.deg) : 0; return [{ t: d.ad, bold: true }, d.personel, d.deg, d.tamam, { oran: r, t: d.deg ? `%${Math.round(r * 100)}` : "—", renk: d.deg ? oranRenk(r) : SOFT }]; }),
+      [1, 2, 3]);
+    y += 8;
+
+    bolum("Okuma Notları", null, 26);
+    [
+      "Oranlar, kıdemi 6 aydan az olan çalışanlar hariç değerlendirilebilir personel üzerinden hesaplanır.",
+      "Yetenek göstergeleri, ayrılma riski ve 9-Grid yalnız tamamlanan değerlendirmelerden gelir; taslaklar ve ilk tur Excel arşivi dahil değildir.",
+      "9-Grid: dikey eksen liderlik potansiyeli (0,6 × potansiyel + 0,4 × öğrenme çevikliği), yatay eksen performans; bant sınırları 75 ve 50.",
+      "Kritik risk: müdürün “yetenek havuzuna alınmalı” dediği ve ayrılma riskini “Yüksek” girdiği çalışan."
+    ].forEach((t) => {
+      yerVar(6);
+      pdf.setFillColor(...BLUE); pdf.circle(M + 1.2, y - 1.1, 0.7, "F");
+      const satirlar = (pdf.setFont("Inter", "normal"), pdf.setFontSize(8), pdf.splitTextToSize(t, IW - 5));
+      yaz(satirlar, M + 4, y, { size: 8, color: INK });
+      y += satirlar.length * 3.6 + 1.6;
+    });
+
+    // Alt bilgi + sayfa numarası
+    const n = pdf.getNumberOfPages();
+    for (let i = 1; i <= n; i++) {
+      pdf.setPage(i);
+      pdf.setDrawColor(...LINE); pdf.setLineWidth(0.2); pdf.line(M, H - 11, W - M, H - 11);
+      yaz(`Yetenek Havuzu · Yönetici Özeti · Kaynak: sistemde kayıtlı güncel değerlendirmeler (${new Date().toLocaleDateString("tr-TR")})`, M, H - 7, { size: 6.8, color: SOFT });
+      yaz(`Sayfa ${i} / ${n}`, W - M, H - 7, { size: 6.8, color: SOFT, align: "right" });
     }
 
     pdf.save(`yetenek-havuzu-yonetici-ozeti-${new Date().toISOString().slice(0, 10)}.pdf`);
   } catch (e) {
     toast("PDF oluşturulamadı: " + e.message);
   }
-  if (btn) { btn.disabled = false; btn.textContent = "Yönetici PDF Raporu İndir"; }
+  if (btn) { btn.disabled = false; btn.textContent = btnMetin || "Yönetici PDF raporu"; }
 }
 
 // ---------------------------------------------------------------
@@ -2093,6 +2274,8 @@ function renderAdmin() {
     </button>`;
   };
   const baslamayanMudur = mgrIlerleme.filter((m) => m.doneCount === 0).length;
+  // Yönetici PDF'i için ek bağlam (Genel Bakış ile aynı hesaplar)
+  Object.assign(summaryCtx, { donem: viewDonem, degerlendirilebilir, oranTamam, sonTarihMetni, mgrIlerleme, ayrTamamSay: ayrTamam.length, riskTamam: riskSay(tamamlananlar), yerlesenSayi, roster, tamamEv });
 
   // --- kompakt 9-Grid ısı haritası ---
   const hmHucre = (c, idx) => `<button type="button" class="hm-cell" data-idx="${idx}" style="--c:${c.cell.renk};--a:${c.list.length ? Math.min(1, 0.35 + c.list.length / Math.max(1, yerlesenSayi) * 2.2) : 0.12}" title="${escH(c.cell.baslik)} · ${escH(POT_ETIKET[c.pot])} / ${escH(PERF_ETIKET[c.perf])}">
