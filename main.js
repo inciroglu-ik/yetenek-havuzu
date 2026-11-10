@@ -1579,6 +1579,11 @@ function buildCompletionData() {
   const isDone = (e) => tazeMap[e.id]?.status === "tamamlandi";
   const empByName = {};
   emps.forEach((e) => { if (e.adSoyad) empByName[nameKey(e.adSoyad)] = e; });
+  // İşten ayrılan: tamamlanmış güncel değerlendirmesi olup bugünkü personel listesinde olmayan kişi.
+  // Değerlendirmeyi KİM GİRDİYSE (submittedByName) ona yazılır — "Kim doldurdu" ile aynı mantık.
+  const rosterIds = new Set(emps.map((e) => e.id));
+  const ayrTamam = Object.entries(tazeMap).filter(([k, ev]) => !rosterIds.has(k) && ev.status === "tamamlandi").map(([, ev]) => ev);
+  const ayrSay = (ad) => ayrTamam.filter((ev) => nameKey(ev.submittedByName || "") === nameKey(ad)).length;
 
   // --- MÜDÜRLER: müdürlük sütunundaki her benzersiz isim bir müdürdür ---
   const mgrNames = Array.from(new Set(emps.map((e) => e.muduluk).filter((m) => m && m !== "-")))
@@ -1591,7 +1596,7 @@ function buildCompletionData() {
       name: mgr,
       dept: (rec && rec.departman) || (team[0] && team[0].departman) || "",
       direktor: (rec && rec.direktor) || (team[0] && team[0].direktor) || "",
-      team, total: team.length, doneCount,
+      team, total: team.length, doneCount, ayrDone: ayrSay(mgr),
       rate: team.length ? doneCount / team.length : null
     };
   });
@@ -1615,10 +1620,10 @@ function buildCompletionData() {
     return {
       name: dir, dept: (rec && rec.departman) || "",
       mudurEmps, aDone, aTotal: mudurEmps.length, rateA,
-      bMgrs, rateB, bWithTeamCount: bWithTeam.length
+      bMgrs, rateB, bWithTeamCount: bWithTeam.length, ayrDone: ayrSay(dir)
     };
   });
-  return { mgrs, dirs };
+  return { mgrs, dirs, ayrToplam: ayrTamam.length };
 }
 // Bir müdür satırı (şerit + tıklanınca ekip kırılımı)
 function tcMgrRow(m) {
@@ -1637,7 +1642,7 @@ function tcMgrRow(m) {
           <span class="tc-name">${escH(m.name)}</span>
           <span class="tc-pct" style="color:${col}">${pct}</span>
         </div>
-        <div class="tc-sub">${escH(m.dept || "—")} · ${m.doneCount}/${m.total} tamamlandı</div>
+        <div class="tc-sub">${escH(m.dept || "—")} · ${m.doneCount}/${m.total} tamamlandı${m.ayrDone ? ` · <span class="ayr-not">+${m.ayrDone} işten ayrılan kişiyi değerlendirdi</span>` : ""}</div>
         ${tcBar(m.rate)}
       </div>
       ${TC_CHEV}
@@ -1668,6 +1673,7 @@ function tcDirRow(d) {
         </div>
         ${pbarHtml("Müdürlerini değerlendirmesi", d.aDone + "/" + d.aTotal, d.rateA)}
         ${pbarHtml("Müdür ekiplerinin tamamlanması", d.bWithTeamCount + " müdür", d.rateB)}
+        ${d.ayrDone ? `<div class="tc-sub"><span class="ayr-not">+${d.ayrDone} işten ayrılan kişiyi değerlendirdi</span></div>` : ""}
       </div>
       ${TC_CHEV}
     </div>
@@ -1691,9 +1697,10 @@ function tamamlamaTabHtml(cd) {
       <div class="stat-card"><div class="n">${avgMgr == null ? "—" : Math.round(avgMgr * 100) + "%"}</div><div class="l">Ort. Müdür Tamamlama</div></div>
       <div class="stat-card"><div class="n">${fullMgr}</div><div class="l">Tümünü Tamamlayan Müdür</div></div>
       <div class="stat-card"><div class="n">${cd.dirs.length}</div><div class="l">Direktör</div></div>
+      <div class="stat-card"><div class="n">${cd.ayrToplam}</div><div class="l">İşten Ayrılan (Değerlendirilmiş)</div></div>
     </div>
     <div class="section-title" style="margin-top:8px">Müdür Tamamlama Oranları</div>
-    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 12px">Her müdürün kendi ekibi için tamamladığı değerlendirme oranı. Satıra tıklayınca ekibindeki kişilerin durumu (tamamlandı / taslak / bekliyor) görünür.</p>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 12px">Her müdürün kendi ekibi için tamamladığı değerlendirme oranı (bugünkü ekip). Satıra tıklayınca ekibindeki kişilerin durumu (tamamlandı / taslak / bekliyor) görünür.${cd.ayrToplam ? ` Ayrıca <b>${cd.ayrToplam}</b> değerlendirme sonradan işten ayrılan çalışanlara ait; değerlendirmeyi giren müdürün satırında “+ işten ayrılan” olarak yazar.` : ""}</p>
     <div class="card-list">${cd.mgrs.map(tcMgrRow).join("") || `<div class="empty-state">Müdür bulunamadı.</div>`}</div>
     <div class="section-title" style="margin-top:26px">Direktör Tamamlama Oranları</div>
     <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 12px">İki ölçüt: <b>müdürlerini değerlendirmesi</b> (direktörün kendi doldurduğu) ve <b>müdür ekiplerinin tamamlanması</b> (bağlı müdürlerin ekip oranlarının ortalaması). Satıra tıklayınca kırılım görünür.</p>
@@ -1859,6 +1866,13 @@ function renderAdmin() {
   const havuzEvet = tamamlananlar.filter((ev) => ev.yetenekHavuzuAlinmali === "Evet").length;
   const liderlikVar = tamamlananlar.filter((ev) => ev.liderlikPotansiyeli === "Var").length;
   const fonksiyonelEvet = tamamlananlar.filter((ev) => ev.fonksiyonelGecisUygun === "Evet").length;
+  // --- İşten ayrılanlar: güncel değerlendirmesi olup bugünkü personel listesinde OLMAYANLAR (birikimli görünüm) ---
+  const rosterIdSet = new Set(roster.map((e) => e.id));
+  const ayrilanEvler = Object.entries(tazeMap).filter(([k]) => !rosterIdSet.has(k)).map(([, ev]) => ev);
+  const ayrTamam = ayrilanEvler.filter((ev) => ev.status === "tamamlandi");
+  const ayrTaslakSay = ayrilanEvler.filter((ev) => ev.status === "taslak").length;
+  const arsivAyrilanSay = Object.keys(arsivMap).filter((k) => !rosterIdSet.has(k)).length;
+  const ayrGridSay = ayrTamam.filter((ev) => gridPos(ev)).length;
 
   // --- department distribution (top 8 + "Diğer") ---
   const deptCounts = {};
@@ -1900,8 +1914,9 @@ function renderAdmin() {
     ["Yüksek ayrılma riski", (L) => L.filter((ev) => ev.ayrilmaRiski === "Yüksek").length]
   ];
   const kapsamTablo = `<table class="kapsam-tbl"><thead><tr><th></th>${kapsamlar.map(([k]) => `<th>${k}</th>`).join("")}</tr></thead>
-    <tbody>${olculer.map(([ad, f], i) => `<tr${i === 0 ? ' class="ana"' : ""}><td>${ad}</td>${kapsamlar.map(([, L]) => `<td>${f(L)}</td>`).join("")}</tr>`).join("")}</tbody></table>
-    <div class="ck-not">Tümü bugün çalışan personel içindir. Üstteki kartlar ve 9-Grid <b>Tamamlanan</b> sütununu esas alır; arşiv yeni dönem verisiyle karışmaz.</div>`;
+    <tbody>${olculer.map(([ad, f], i) => `<tr${i === 0 ? ' class="ana"' : ""}><td>${ad}</td>${kapsamlar.map(([, L]) => `<td>${f(L)}</td>`).join("")}</tr>`).join("")}
+    <tr class="ayr-satir"><td>+ İşten ayrılan (ayrıca)</td><td>${ayrTamam.length}</td><td>${ayrTamam.length + ayrTaslakSay}</td><td>${arsivAyrilanSay}</td></tr></tbody></table>
+    <div class="ck-not">Üstteki satırlar bugün çalışan personel içindir; kartlar ve 9-Grid <b>Tamamlanan</b> sütununu esas alır. Son satır, değerlendirmesi olup sonradan işten ayrılan kişilerdir (Personel → İşten ayrılanlar). Arşiv yeni dönem verisiyle karışmaz.</div>`;
 
   // --- 9-GRID: Liderlik Potansiyeli (satır, yüksek→düşük) × Performans (sütun, düşük→yüksek) ---
   const grid9 = {};
@@ -1945,7 +1960,7 @@ function renderAdmin() {
     const p = Math.round((m.rate || 0) * 100);
     const renk = p >= 100 ? "var(--good)" : p > 0 ? "var(--warn)" : "var(--bad)";
     return `<button type="button" class="mgr-row" data-mgr="${escH(m.name)}" title="${escH(m.name)} ekibini listede aç">
-      <span class="mr-ad">${escH(m.name)}<small>${escH(m.dept || "")}</small></span>
+      <span class="mr-ad">${escH(m.name)}<small>${escH(m.dept || "")}${m.ayrDone ? ` · <span class="ayr-not">+${m.ayrDone} işten ayrılan değerlendirdi</span>` : ""}</small></span>
       <span class="mr-bar"><i style="width:${p}%;background:${renk}"></i></span>
       <span class="mr-say"><b>${m.doneCount}</b>/${m.total}</span>
       <span class="mr-bek ${m.bekleyen ? "" : "ok"}">${m.bekleyen ? m.bekleyen + " bekliyor" : "Tamam"}</span>
@@ -2001,7 +2016,7 @@ function renderAdmin() {
       <div class="kpi-serit">
         <button type="button" class="kpi" data-durum=""><span class="kpi-l">Toplam Personel</span><span class="kpi-n">${total}</span><span class="kpi-a">${degerlendirilebilir} kişi değerlendirilebilir</span></button>
         <button type="button" class="kpi" data-durum="disi" title="İşe başlama tarihine göre kıdemi 6 aydan kısa olan çalışanlar değerlendirme dışıdır; Bekliyor sayısına dahil edilmez."><span class="kpi-l">Kişi Değerlendirme Dışı (6 Ay Altı Kıdem)</span><span class="kpi-n">${disi}</span><span class="kpi-a">Kıdemi 6 ayı doldurunca açılır</span></button>
-        <button type="button" class="kpi vurgu" data-durum="tamamlandi"><span class="kpi-l">Tamamlandı</span><span class="kpi-n">${done}<small>%${oranTamam}</small></span><span class="kpi-bar"><i style="width:${oranTamam}%"></i></span><span class="kpi-a">${degerlendirilebilir} değerlendirilebilir kişiden</span></button>
+        <button type="button" class="kpi vurgu" data-durum="tamamlandi"><span class="kpi-l">Tamamlandı</span><span class="kpi-n">${done}<small>%${oranTamam}</small></span><span class="kpi-bar"><i style="width:${oranTamam}%"></i></span><span class="kpi-a">${degerlendirilebilir} değerlendirilebilir kişiden${ayrTamam.length ? `<br><b class="ayr-not">+${ayrTamam.length} işten ayrılan</b> · ilk günden bugüne ${done + ayrTamam.length}` : ""}</span></button>
         <button type="button" class="kpi" data-durum="taslak"><span class="kpi-l">Taslak</span><span class="kpi-n">${draft}</span><span class="kpi-a">Kaydedildi, tamamlanmadı</span></button>
         <button type="button" class="kpi ${bekliyor ? "dikkat" : ""}" data-durum="bekliyor"><span class="kpi-l">Bekliyor</span><span class="kpi-n">${bekliyor}</span><span class="kpi-a">Henüz değerlendirilmedi</span></button>
         <div class="kpi bilgi ${sonGun != null && sonGun > 14 ? "dikkat" : ""}"><span class="kpi-l">Son Değerlendirme</span><span class="kpi-n kucuk">${sonTarihMetni}</span><span class="kpi-a">${sonGun == null ? "Henüz giriş yok" : sonGun > 14 ? sonGun + " gündür yeni giriş yok" : sonGun + " gün önce"}</span></div>
@@ -2018,7 +2033,7 @@ function renderAdmin() {
         </section>
 
         <section class="pnl span6">
-          <div class="pnl-h"><div><h3>Yetenek Matrisi (9-Grid)</h3><p>Tamamlanan ${yerlesenSayi} kişi · kutuya tıklayınca kişiler açılır</p></div><button type="button" class="pnl-link" data-git="grid">Ayrıntılı matris →</button></div>
+          <div class="pnl-h"><div><h3>Yetenek Matrisi (9-Grid)</h3><p>Tamamlanan ${yerlesenSayi} kişi · kutuya tıklayınca kişiler açılır${ayrGridSay ? ` · <span class="ayr-not">işten ayrılan ${ayrGridSay} kişi matriste gösterilmez</span>` : ""}</p></div><button type="button" class="pnl-link" data-git="grid">Ayrıntılı matris →</button></div>
           <div class="hm-wrap">
             <div class="hm-y">Liderlik potansiyeli →</div>
             <div class="hm-grid">
@@ -2058,7 +2073,7 @@ function renderAdmin() {
     <div id="tabGrid" class="sekme">
       <div class="box9-wrap">
         <h3 style="margin:0 0 4px">9-Grid · İnsanlar Üzerine Değerlendirme</h3>
-        <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft)">Değerlendirmesi tamamlanan <b>${yerlesenSayi}</b> personel, <b>Performans</b> (T–AH bloğu · Düşük/Orta/Yüksek) ve <b>Liderlik Potansiyeli</b> (Potansiyel yetkinlikleri %60 + Öğrenme Çevikliği %40) puanlarına göre otomatik yerleştirilir. Her kutunun açıklaması, o gruba <i>neden</i> dahil olunduğunu anlatır — kılavuz niteliğindedir. Kutuya tıklayınca kişiler listelenir.</p>
+        <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft)">Değerlendirmesi tamamlanan <b>${yerlesenSayi}</b> personel, <b>Performans</b> (T–AH bloğu · Düşük/Orta/Yüksek) ve <b>Liderlik Potansiyeli</b> (Potansiyel yetkinlikleri %60 + Öğrenme Çevikliği %40) puanlarına göre otomatik yerleştirilir. Her kutunun açıklaması, o gruba <i>neden</i> dahil olunduğunu anlatır — kılavuz niteliğindedir. Kutuya tıklayınca kişiler listelenir.${ayrGridSay ? ` <b>İşten ayrılan ${ayrGridSay} kişinin</b> tamamlanmış değerlendirmesi matriste gösterilmez; Personel → “İşten ayrılanlar”da görülebilir.` : ""}</p>
         <div style="display:flex;gap:10px;align-items:stretch">
           <div style="writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;font-weight:700;color:var(--navy);font-size:12.5px;letter-spacing:.04em;padding:4px 0">LİDERLİK POTANSİYELİ →</div>
           <div style="flex:1;overflow-x:auto">
@@ -2091,9 +2106,11 @@ function renderAdmin() {
     <div id="tabList" class="sekme">
       <div class="kaynak-sec" role="tablist" aria-label="Veri kaynağı">
         <button type="button" role="tab" data-kaynak="guncel" class="${ADM.kaynak === "guncel" ? "on" : ""}">Güncel değerlendirmeler</button>
+        <button type="button" role="tab" data-kaynak="ayrilan" class="${ADM.kaynak === "ayrilan" ? "on" : ""}">İşten ayrılanlar · ${ayrilanEvler.length} kişi</button>
         <button type="button" role="tab" data-kaynak="arsiv" class="${ADM.kaynak === "arsiv" ? "on" : ""}">İlk değerlendirme (arşiv) · ${arsivEvler.length} kişi</button>
       </div>
-      ${ADM.kaynak === "arsiv" ? `<div class="arsiv-not">Bu görünüm, ilk tur Excel matrisinden aktarılan <b>arşiv</b> kayıtlarını gösterir (bugün çalışan ${arsivEvler.length} kişi). Güncel sayılara, grafiklere ve tamamlama oranlarına <b>dahil değildir</b>.</div>` : ""}
+      ${ADM.kaynak === "arsiv" ? `<div class="arsiv-not">Bu görünüm, ilk tur Excel matrisinden aktarılan <b>arşiv</b> kayıtlarını gösterir (bugün çalışan ${arsivEvler.length} kişi${arsivAyrilanSay ? `; ayrıca ${arsivAyrilanSay} arşiv kaydı bugün listede olmayan kişilere ait` : ""}). Güncel sayılara, grafiklere ve tamamlama oranlarına <b>dahil değildir</b>.</div>` : ""}
+      ${ADM.kaynak === "ayrilan" ? `<div class="arsiv-not">Bu görünüm, güncel değerlendirmesi girilmiş ama <b>sonradan işten ayrılmış</b> ${ayrilanEvler.length} kişiyi gösterir (${ayrTamam.length} tamamlandı${ayrTaslakSay ? `, ${ayrTaslakSay} taslak` : ""}). Bugünkü personel sayılarına ve oranlara dahil değildir; “ilk günden bugüne” toplamlarında ayrıca belirtilir.</div>` : ""}
       <div class="chip-row" id="durumCipler" ${ADM.kaynak === "arsiv" ? "hidden" : ""}>
         ${[["", "Tümü"], ["tamamlandi", "Tamamlandı"], ["taslak", "Taslak"], ["bekliyor", "Bekliyor"], ["disi", "Değerlendirme dışı"]].map(([k, l]) => `<button type="button" class="chip ${F.durum === k ? "on" : ""}" data-durum="${k}">${l}<b>${durumSay[k]}</b></button>`).join("")}
       </div>
@@ -2239,13 +2256,16 @@ function renderAdmin() {
   let sonFiltreli = [];
   // Kaynak: güncel (taze) ya da ilk değerlendirme arşivi — ikisi ASLA aynı satırda karışmaz
   const arsivModu = ADM.kaynak === "arsiv";
+  const ayrModu = ADM.kaynak === "ayrilan";
   const evOf = (e) => (arsivModu ? arsivMap[e.id] : evaluationsMap[e.id]);
+  // İşten ayrılanlar görünümünde satırlar değerlendirme kaydından üretilir (kişi bugünkü listede yok)
+  const tabanListe = ayrModu ? ayrilanEvler.map((ev) => evToEmp(ev)) : roster;
   function draw() {
     const term = (F.q || "").trim().toLocaleLowerCase("tr");
     const col = ADMIN_COLUMNS.find((c) => c.key === ADM.sort.key) || ADMIN_COLUMNS[0];
     // Durum DIŞINDAKİ TÜM filtreler → çip sayıları bu kümeden. Böylece müdür satırındaki "3/6" ve
     // Kapsam tablosundaki "Tamamlanan / Taslak dahil" sayıları çiplerde birebir görünür (ör. Yüksek risk: Tamamlandı 3 · Taslak 1).
-    const onDurum = roster
+    const onDurum = tabanListe
       .filter((e) => !arsivModu || arsivMap[e.id])
       .filter((e) => e.adSoyad.toLocaleLowerCase("tr").includes(term))
       .filter((e) => !F.mgr || (e.muduluk === F.mgr && e.adSoyad !== F.mgr))
@@ -2274,9 +2294,9 @@ function renderAdmin() {
         return ADM.sort.dir * cmp;
       });
     sonFiltreli = list;
-    el("#sonucSay").innerHTML = `<b>${list.length}</b> kişi listeleniyor${arsivModu ? " · arşiv" : ""}`;
+    el("#sonucSay").innerHTML = `<b>${list.length}</b> kişi listeleniyor${arsivModu ? " · arşiv" : ayrModu ? " · işten ayrılan" : ""}`;
 
-    const canEdit = isDuzenlenebilir() && !arsivModu;
+    const canEdit = isDuzenlenebilir() && !arsivModu && !ayrModu;
     el("#tbody").innerHTML = list.map((e) => {
       const ev = evOf(e);
       const duzenleBtn = canEdit ?`<button type="button" class="link-btn eval-edit" data-id="${escH(e.id)}" style="color:var(--navy);font-weight:600;margin-right:10px">Düzenle</button>` : "";
