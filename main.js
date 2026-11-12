@@ -359,9 +359,10 @@ let yeniTurMap = {};       // employeeId -> yeni turda girilen kayıt (YENI_TUR.
 // YENİ TUR (10.11.2026 toplantısı): müdür ve direktörler yeniden değerlendirmeye çağrıldı.
 // • Mevcut kayıtlar ("2026::personel") HİÇ değiştirilmez → İK'nın "İlk Analizler" sekmesi bu kayıtları gösterir.
 // • Yeni turda kaydedilen her şey ayrı belgeye yazılır: "2026-2::personel" (İncele / Düzenle / Yeniden Değerlendir).
-// • Ekranda kişinin GÜNCEL kaydı: yeni tur kaydı TAMAMLANDIYSA o; değilse ilk kayıt. Yani müdür hiçbir şey yapmazsa
-//   önceki değerlendirmesi "Tamamlandı" olarak geçerli kalır; yarım bırakılan yeniden değerlendirme (taslak)
-//   tamamlanmış ilk kaydı gölgelemez.
+// • GÜNCEL (Genel Bakış, Personel, Matris, Tamamlama, PDF, müdür sayıları) = YALNIZ yeni tur kayıtları (12.11.2026
+//   kullanıcı kararı: "genel bakışta her şey sıfırdan gözüksün, mailden sonra girilenler görünsün"). Eski kayıtlar
+//   yalnız İlk Analizler'de ve müdür kartında "önceki değerlendirme" olarak görünür (İncele / Düzenle ile açılır).
+//   Önceki değerlendirmeyi aynen geçerli kılmak isteyen müdür Düzenle → Değerlendirmeyi Tamamla der.
 // • Neden ayrı belge: Firestore kuralı tamamlanmış bir kaydı yalnız onu giren hesaba açıyor; 19.10 öncesi kayıtların
 //   giriş hesabı yenilendiği için aynı belge güncellenemiyordu. Ayrı belge kural değişikliği gerektirmez.
 // ---------------------------------------------------------------
@@ -504,12 +505,9 @@ function rebuildEvalMap() {
     const cur = tazeMap[key];
     if (!cur || evalDahaYeni(ev, cur)) tazeMap[key] = ev;
   });
-  // İlk Analizler = yeni tur öncesi kayıtlar (değişmez). Güncel = yeni tur kaydı tamamlandıysa o, değilse ilk kayıt.
+  // İlk Analizler = yeni tur öncesi kayıtlar (değişmez). Güncel = YALNIZ yeni tur kayıtları (sıfırdan başlar).
   ilkMap = Object.assign({}, tazeMap);
-  Object.keys(yeniTurMap).forEach((key) => {
-    const yeni = yeniTurMap[key], ilk = ilkMap[key];
-    if (!ilk || yeni.status === "tamamlandi" || ilk.status !== "tamamlandi") tazeMap[key] = yeni;
-  });
+  if (turAktif()) tazeMap = Object.assign({}, yeniTurMap);
   // HERKES (müdür + admin): evaluationsMap = YALNIZ taze kayıtlar. Arşiv ("İlk Değerlendirme", Excel matrisi)
   // güncel veriye HİÇBİR yerde karışmaz; admin arşivi ayrıca görür: Personel listesinde "Kaynak: İlk değerlendirme
   // (arşiv)" seçimi, kişi kartı ve karnede "İlk Değerlendirme (Arşiv)" bölümü (arsivMap).
@@ -810,8 +808,8 @@ function renderManager() {
           ${disiSayi ? `<div class="stat-card"><div class="n">${disiSayi}</div><div class="l">Kıdem &lt; 6 Ay (Dışı)</div></div>` : ""}
         </div>` : ""}
         ${aktif ? `<div class="tur-bilgi">
-          <b>Daha önce yaptığınız değerlendirmeler kayıtlıdır.</b> Değiştirmek istemediğiniz çalışan için hiçbir şey yapmanıza gerek yok, “Tamamlandı” olarak geçerli kalır.
-          <ul><li><b>İncele:</b> kaydı görüntüler, hiçbir şeyi değiştirmez.</li><li><b>Düzenle:</b> önceki cevaplarınız dolu gelir; değiştirip kaydedersiniz.</li><li><b>Yeniden Değerlendir:</b> form boş açılır, baştan değerlendirirsiniz.</li></ul>
+          <b>Yeni değerlendirme turu (${YENI_TUR.kesim}):</b> her çalışan için değerlendirmenizi bu turda kaydetmeniz gerekir. Daha önce yaptığınız değerlendirmeler silinmedi; kartın altında “Önceki değerlendirme” olarak görünür.
+          <ul><li><b>İncele:</b> kaydı görüntüler, hiçbir şeyi değiştirmez.</li><li><b>Düzenle:</b> önceki cevaplarınız dolu gelir. Aynen geçerli olsun istiyorsanız kontrol edip <b>“Değerlendirmeyi Tamamla”</b>ya basmanız yeterli; isterseniz değiştirip kaydedersiniz.</li><li><b>Yeniden Değerlendir:</b> form boş açılır, baştan değerlendirirsiniz.</li></ul>
         </div>` : ""}
         <div class="toolbar">
           <input type="text" id="searchBox" placeholder="İsimle ara…" style="min-width:220px">
@@ -852,16 +850,14 @@ function renderManager() {
       </div>`;
     }
     // Yeni tur: kaydı olan kişide 3 seçenek (İncele · Düzenle · Yeniden Değerlendir); kaydı yoksa "Değerlendir"
+    // ev = yeni tur kaydı (güncel); ilk = yeni tur öncesi kayıt (İlk Analizler) — yalnız gösterim ve Düzenle ön dolumu için
     const secenekli = aktif && !saltOkunur;
-    const yeni = yeniTurMap[e.id];
+    const ilk = aktif && turAktif() ? ilkMap[e.id] : null;
     const tarih = (x) => (x && x.updatedAt && x.updatedAt.toDate ? x.updatedAt.toDate().toLocaleDateString("tr-TR") : "");
     let kayitNot = "";
-    if (ev && secenekli) {
-      kayitNot = `Değerlendiren: ${escH(ev.submittedByName || "—")}${tarih(ev) ? " · " + tarih(ev) : ""}`;
-      if (yeni && yeni !== ev) kayitNot += ` · <span class="tur-not">Yeni turda taslakta (tamamlanınca geçerli olur)</span>`;
-      else if (yeni && ilkMap[e.id]) kayitNot += ` · <span class="tur-not">${yeni.status === "tamamlandi" ? "Yeni turda güncellendi" : "Yeni turda taslakta"}</span>`;
-    }
-    const butonlar = !secenekli ? "" : ev
+    if (aktif && ev) kayitNot = `Yeni tur · Değerlendiren: ${escH(ev.submittedByName || "—")}${tarih(ev) ? " · " + tarih(ev) : ""}`;
+    else if (aktif && ilk) kayitNot = `Önceki değerlendirme: ${escH(ilk.submittedByName || "—")}${tarih(ilk) ? " · " + tarih(ilk) : ""}${ilk.status === "tamamlandi" ? "" : " (taslak)"} · <span class="tur-not">yeni turda henüz kaydedilmedi</span>`;
+    const butonlar = !secenekli ? "" : (ev || ilk)
       ? `<span class="emp-act"><button type="button" class="btn btn-ghost btn-sm" data-act="incele">İncele</button><button type="button" class="btn btn-ghost btn-sm" data-act="duzenle">Düzenle</button><button type="button" class="btn btn-brass btn-sm" data-act="yeniden">Yeniden Değerlendir</button></span>`
       : `<span class="emp-act"><button type="button" class="btn btn-brass btn-sm" data-act="degerlendir">Değerlendir</button></span>`;
     return `
@@ -901,8 +897,8 @@ function renderManager() {
         // Kart: kaydı varsa İncele (güvenli), yoksa Değerlendir. Düğmeler kendi işini yapar.
         node.addEventListener("click", (olay) => {
           const b = olay.target.closest("[data-act]");
-          const act = b ? b.dataset.act : (evaluationsMap[e.id] ? "incele" : "degerlendir");
-          if (act === "incele") { openAdminDetailDrawer(e); return; }
+          const act = b ? b.dataset.act : ((evaluationsMap[e.id] || ilkMap[e.id]) ? "incele" : "degerlendir");
+          if (act === "incele") { inceleAc(e); return; }
           // Yeni turda başka bir hesabın TAMAMLADIĞI kayıt: kural yalnız o kişiye/İK'ya izin verir → formu hiç açma
           const y = yeniTurMap[e.id];
           if (y && y.status === "tamamlandi" && y.submittedByUid && y.submittedByUid !== currentUid) {
@@ -911,7 +907,7 @@ function renderManager() {
           }
           if (act === "duzenle" || act === "degerlendir") openEvalDrawer(e, "duzenle");
           else if (act === "yeniden") {
-            if (!confirm(`${e.adSoyad} için form BOŞ açılacak ve baştan değerlendireceksiniz.\n\nÖnceki değerlendirmeniz siz yenisini "Değerlendirmeyi Tamamla" ile kaydedene kadar geçerli kalır.`)) return;
+            if (!confirm(`${e.adSoyad} için form BOŞ açılacak ve baştan değerlendireceksiniz.\n\nÖnceki değerlendirmeniz silinmez; İnsan Kaynakları'nda yeni tur öncesi kayıt olarak saklı kalır.`)) return;
             openEvalDrawer(e, "yeniden");
           }
         });
@@ -924,7 +920,7 @@ function renderManager() {
       vl.innerHTML = vList.length ? vList.map((e) => empCardHtml(e, true)).join("") : `<div class="empty-state">Görüntülenecek personel yok.</div>`;
       vList.forEach((e) => {
         const node = document.getElementById("card-" + e.id);
-        if (node) node.addEventListener("click", () => openAdminDetailDrawer(e));
+        if (node) node.addEventListener("click", () => inceleAc(e));
       });
     }
   }
@@ -942,7 +938,9 @@ function renderManager() {
 // Kayıt her zaman yeni tur belgesine yazılır (yazmaDonemi()::personel); ilk kayıt hiç değişmez.
 function openEvalDrawer(emp, mod) {
   const yeniden = mod === "yeniden";
-  const existing = yeniden ? {} : (yeniTurMap[emp.id] || evaluationsMap[emp.id] || {});
+  // Ön dolum: yeni turdaki kayıt (taslak/tamam) varsa o; yoksa yeni tur öncesi kayıt (İlk Analizler; o belgeye yazılmaz)
+  const existing = yeniden ? {} : (yeniTurMap[emp.id] || evaluationsMap[emp.id] || ilkMap[emp.id] || {});
+  const oncekindenDolu = !yeniden && turAktif() && !yeniTurMap[emp.id] && !!ilkMap[emp.id];
   // Yeni turda TAMAMLANMIŞ kayıt taslağa düşürülmez (Taslak düğmesi gizli; eksik formda otomatik kayıt yapılmaz).
   const yeniTamam = !!(yeniTurMap[emp.id] && yeniTurMap[emp.id].status === "tamamlandi");
   // Otomatik kayıt yalnız müdür/direktörün "Düzenle"sinde. Yeniden Değerlendir ve İK düzenlemesi yalnız düğmeyle kaydeder
@@ -1046,6 +1044,7 @@ function openEvalDrawer(emp, mod) {
   function bodyHtml() {
     return `
     ${yeniden ? `<div class="tur-bilgi yeniden"><b>Yeniden değerlendirme:</b> form boş açıldı. Otomatik kayıt bu modda kapalıdır; ${yeniTamam ? "“Değerlendirmeyi Tamamla”" : "“Taslak Olarak Kaydet” ya da “Değerlendirmeyi Tamamla”"} ile kaydedin. Yenisini tamamlayana kadar önceki değerlendirme geçerli kalır.</div>` : ""}
+    ${oncekindenDolu ? `<div class="tur-bilgi"><b>Önceki değerlendirme dolu geldi.</b> Yeni turda geçerli olması için kontrol edip <b>“Değerlendirmeyi Tamamla”</b>ya basın. Önceki kayıt değişmez, İnsan Kaynakları'nda saklı kalır.</div>` : ""}
     ${(!yeniden && !otoKayit) ? `<div class="tur-bilgi yeniden"><b>İK düzenlemesi:</b> otomatik kayıt kapalıdır; değişiklikler yalnız alttaki düğmeyle kaydedilir. İK adına tamamlanan bir değerlendirmeyi bundan sonra müdür değiştiremez, yalnız İK değiştirebilir.</div>` : ""}
     <div class="section-title">Genel</div>
     <div class="comp-row">
@@ -1271,6 +1270,12 @@ function scoreLabelText(v) {
   return found ? found.l : "—";
 }
 
+// İncele (müdür/direktör kartı): yeni tur kaydı varsa onu, yoksa yeni tur öncesi kaydı salt okunur gösterir
+function inceleAc(e) {
+  const ilk = turAktif() ? ilkMap[e.id] : null;
+  if (!evaluationsMap[e.id] && ilk) openAdminDetailDrawer(e, { ilk: true, ev: ilk });
+  else openAdminDetailDrawer(e);
+}
 // opts.ilk = true → "İlk Analizler" kaydı (opts.ev): değişmez yedek; düzenleme/silme/A4 düğmeleri gösterilmez.
 function openAdminDetailDrawer(emp, opts) {
   const ilkGorunum = !!(opts && opts.ilk);
@@ -1281,8 +1286,12 @@ function openAdminDetailDrawer(emp, opts) {
   // Admin: güncel kayıt yeni turda güncellendiyse ilk hâlinin yerini söyle
   const turNotu = (!ilkGorunum && currentProfile.isAdmin && ev && ev.donem === YENI_TUR.kod && ilkMap[emp.id])
     ? `<div class="arsiv-not">Bu kayıt yeni turda güncellendi. Kişinin önceki değerlendirmesi <b>İlk Analizler</b> sekmesinde aynen duruyor.</div>` : "";
-  const ilkBaslik = ilkGorunum
-    ? `<div class="arsiv-not"><b>İlk Analizler kaydı</b> · yeni tur öncesi (${YENI_TUR.kesim}) hâli; değişmez yedek.${(tazeMap[emp.id] && tazeMap[emp.id] !== ev) ? " Kişinin güncel değerlendirmesi yeni turda değişti." : ""}</div>` : "";
+  const yeniTurdaVar = !!(tazeMap[emp.id] && tazeMap[emp.id] !== ev);
+  const ilkBaslik = !ilkGorunum ? "" : currentProfile.isAdmin
+    ? `<div class="arsiv-not"><b>İlk Analizler kaydı</b> · yeni tur öncesi (${YENI_TUR.kesim}) hâli; değişmez yedek. ${yeniTurdaVar ? "Kişi yeni turda da değerlendirildi; güncel kayıt Genel Bakış ve Personel'dedir." : "Yeni turda henüz değerlendirilmedi."}</div>`
+    : `<div class="arsiv-not"><b>Önceki değerlendirme</b> · yeni tur öncesi (${YENI_TUR.kesim}) kaydı; değişmez. ${yeniTurdaVar ? "Yeni turdaki kaydınız ayrıca tutulur." : "Yeni turda geçerli olması için kartta <b>Düzenle</b> → <b>Değerlendirmeyi Tamamla</b>."}</div>`;
+  // Admin, yeni turda kaydı olmayan kişide: önceki (İlk Analizler) kaydını tek tıkla açabilsin
+  const ilkVarYeniYok = !ilkGorunum && !ev && turAktif() && !!ilkMap[emp.id];
 
   const overlay = document.createElement("div");
   overlay.className = "overlay";
@@ -1297,7 +1306,9 @@ function openAdminDetailDrawer(emp, opts) {
   function bodyHtml() {
     if (!ev) {
       if (kidemDisi(emp)) return `<div class="empty-state">Bu personel <b>kıdemi 6 aydan az</b> olduğu için değerlendirme dışıdır; müdürüne metrikler doldurtulmaz.</div>`;
-      const bos = `<div class="empty-state">Bu personel için henüz (yeni metriklerle) değerlendirme girilmedi.</div>`;
+      const bos = ilkVarYeniYok
+        ? `<div class="empty-state">Bu personel <b>yeni turda (${YENI_TUR.kesim} sonrası)</b> henüz değerlendirilmedi.<br><br>Yeni tur öncesi değerlendirmesi var: ${escH(ilkMap[emp.id].submittedByName || "—")} · ${ilkMap[emp.id].status === "tamamlandi" ? "Tamamlandı" : "Taslak"}<br><button type="button" class="btn btn-ghost btn-sm" id="ilkGosterBtn" style="margin-top:10px">Önceki değerlendirmeyi göster</button></div>`
+        : `<div class="empty-state">Bu personel için henüz (yeni metriklerle) değerlendirme girilmedi.</div>`;
       return bos + eskiBlokHtml();
     }
     const pos = gridPos(ev);
@@ -1414,6 +1425,8 @@ function openAdminDetailDrawer(emp, opts) {
   const _a4Btn = el("#printKarneA4"); if (_a4Btn) _a4Btn.onclick = () => karneYazdir([emp]);
   const _editBtn = el("#editFromDetail");
   if (_editBtn) _editBtn.onclick = () => { overlay.remove(); openEvalDrawer(emp); };
+  const _ilkBtn = el("#ilkGosterBtn");
+  if (_ilkBtn) _ilkBtn.onclick = () => { overlay.remove(); openAdminDetailDrawer(emp, { ilk: true, ev: ilkMap[emp.id] }); };
 }
 
 // ---------------------------------------------------------------
@@ -2273,7 +2286,20 @@ function renderAdmin() {
       <span class="mr-bek ${m.bekleyen ? "" : "ok"}">${m.bekleyen ? m.bekleyen + " bekliyor" : "Tamam"}</span>
     </button>`;
   };
-  const baslamayanMudur = mgrIlerleme.filter((m) => m.doneCount === 0).length;
+  // Hiç başlamayan = ekibinde güncel (yeni tur) kaydı — tamamlanmış ya da taslak — olmayan müdür
+  const baslamayanMudur = mgrIlerleme.filter((m) => !m.team.some((e) => tazeMap[e.id])).length;
+  // Yeni turda (mail sonrası) kim giriş yaptı: girene göre tamamlanan / taslak / son giriş
+  const ytKim = new Map();
+  Object.values(turAktif() ? yeniTurMap : {}).forEach((ev) => {
+    const ad = ev.submittedByName || "—";
+    const o = ytKim.get(ad) || { ad, tamam: 0, taslak: 0, son: 0 };
+    if (ev.status === "tamamlandi") o.tamam++; else o.taslak++;
+    const t = ev.updatedAt && ev.updatedAt.toMillis ? ev.updatedAt.toMillis() : 0; if (t > o.son) o.son = t;
+    ytKim.set(ad, o);
+  });
+  const ytKimListe = [...ytKim.values()].sort((a, b) => b.son - a.son);
+  const ytKimHtml = !turAktif() ? "" : `<div class="yt-kim"><span class="yt-kim-l">Yeni turda (${YENI_TUR.kesim} sonrası) giriş yapanlar · ${ytKimListe.length} kişi</span>
+    <div class="ilk-kim-liste">${ytKimListe.map((o) => `<span class="ilk-kim yt" title="Son giriş ${o.son ? new Date(o.son).toLocaleDateString("tr-TR") : "—"}"><span>${escH(o.ad)}</span><b>${o.tamam}</b>${o.taslak ? `<small>+${o.taslak} taslak</small>` : ""}<em>${o.son ? new Date(o.son).toLocaleDateString("tr-TR") : ""}</em></span>`).join("") || `<span class="bos-not">Henüz kimse giriş yapmadı.</span>`}</div></div>`;
   // Yönetici PDF'i için ek bağlam (Genel Bakış ile aynı hesaplar)
   Object.assign(summaryCtx, { donem: viewDonem, degerlendirilebilir, oranTamam, sonTarihMetni, mgrIlerleme, ayrTamamSay: ayrTamam.length, riskTamam: riskSay(tamamlananlar), yerlesenSayi, roster, tamamEv });
 
@@ -2308,7 +2334,7 @@ function renderAdmin() {
     <div class="page-head">
       <div>
         <h1>İK Değerlendirme Paneli</h1>
-        <p>${escH(viewDonem)} dönemi · ${total} çalışan · Son değerlendirme girişi <b>${sonTarihMetni}</b>${sonGun != null ? ` (${sonGun === 0 ? "bugün" : sonGun + " gün önce"})` : ""}</p>
+        <p>${escH(viewDonem)} dönemi${turAktif() ? ` · <b>Yeni tur</b> (${YENI_TUR.kesim} sonrası girişler; öncekiler <button type="button" class="link-btn" data-git="ilk" style="font-size:inherit;cursor:pointer">İlk Analizler</button>'de)` : ""} · ${total} çalışan · Son değerlendirme girişi <b>${sonTarihMetni}</b>${sonGun != null ? ` (${sonGun === 0 ? "bugün" : sonGun + " gün önce"})` : ""}</p>
       </div>
       <div class="dd">
         <button class="btn btn-ghost btn-sm" id="ddBtn" type="button" aria-haspopup="true" aria-expanded="false">Dışa Aktar ▾</button>
@@ -2335,6 +2361,7 @@ function renderAdmin() {
       <div class="ov-grid">
         <section class="pnl span8">
           <div class="pnl-h"><div><h3>Müdürlere Göre İlerleme</h3><p>En çok bekleyen ekip üstte · ${mgrIlerleme.length} müdürden <b>${baslamayanMudur}</b>'i hiç başlamadı · satıra tıklayınca o ekip açılır</p></div><button type="button" class="pnl-link" data-git="tamamlama">Tüm müdür ve direktörler →</button></div>
+          ${ytKimHtml}
           <div class="mgr-list">${mgrIlerleme.slice(0, 9).map(mgrSatir).join("") || `<div class="bos-not">Müdür kaydı yok.</div>`}</div>
         </section>
         <section class="pnl span4">
@@ -2497,7 +2524,7 @@ function renderAdmin() {
       if (I.tur && k.tur !== I.tur) return false;
       return true;
     }).sort((a, b) => ms(b.ev) - ms(a.ev) || String(a.ev.adSoyad || "").localeCompare(String(b.ev.adSoyad || ""), "tr"));
-    const turEtiket = { aynen: `<span class="tur-et">Aynen geçerli</span>`, guncellendi: `<span class="tur-et g">Yeni turda güncellendi</span>`, taslakta: `<span class="tur-et t">Yeni turda taslakta</span>` };
+    const turEtiket = { aynen: `<span class="tur-et">Yeni turda bekliyor</span>`, guncellendi: `<span class="tur-et g">Yeni turda tamamlandı</span>`, taslakta: `<span class="tur-et t">Yeni turda taslakta</span>` };
     const satir = (k) => {
       const ev = k.ev, e = k.emp, pos = gridPos(ev), oneri = sistemOnerisi(ev);
       return `<tr class="ilk-satir" data-key="${escH(k.key)}">
@@ -2514,13 +2541,13 @@ function renderAdmin() {
       </tr>`;
     };
     el("#tabIlk").innerHTML = `
-      <div class="arsiv-not">Yeni değerlendirme turu başlamadan önce (<b>${YENI_TUR.kesim}</b>) müdür ve direktörlerin sistemde girdiği <b>tüm değerlendirmeler</b>. Bu kayıtlar <b>değişmez</b>: müdürler yeni turda düzenlese ya da yeniden değerlendirse de ilk hâli burada kalır. Güncel sayılar Genel Bakış'tadır. Excel matrisinden aktarılan ilk tur arşivi ayrıca Personel → “İlk değerlendirme (arşiv)” altındadır.</div>
+      <div class="arsiv-not">Yeni değerlendirme turu başlamadan önce (<b>${YENI_TUR.kesim}</b>) müdür ve direktörlerin sistemde girdiği <b>tüm değerlendirmeler</b>. Bu kayıtlar <b>değişmez</b>: müdürler yeni turda düzenlese ya da yeniden değerlendirse de ilk hâli burada kalır. Genel Bakış artık yalnız yeni turda (bu tarihten sonra) girilen değerlendirmeleri sayar. Excel matrisinden aktarılan ilk tur arşivi ayrıca Personel → “İlk değerlendirme (arşiv)” altındadır.</div>
       <div class="kpi-serit">
         <div class="kpi"><span class="kpi-l">Kayıtlı Değerlendirme</span><span class="kpi-n">${kayitlar.length}</span><span class="kpi-a">${tamam.length} tamamlandı · ${taslakSay} taslak</span></div>
         <div class="kpi vurgu"><span class="kpi-l">Tamamlanan (bugünkü personel)</span><span class="kpi-n">${tamamBugun}</span><span class="kpi-a">${tamamAyr ? `<b class="ayr-not">+${tamamAyr} işten ayrılan</b> · ilk günden bugüne ${tamam.length}` : "İşten ayrılan yok"}</span></div>
         <div class="kpi"><span class="kpi-l">Değerlendirme Giren</span><span class="kpi-n">${kimListe.length}</span><span class="kpi-a">müdür / direktör</span></div>
         <div class="kpi bilgi"><span class="kpi-l">Son Giriş</span><span class="kpi-n kucuk">${sonMs ? new Date(sonMs).toLocaleDateString("tr-TR") : "—"}</span><span class="kpi-a">yeni tur öncesi</span></div>
-        <div class="kpi"><span class="kpi-l">Yeni Turda Değişen</span><span class="kpi-n">${guncellenen}</span><span class="kpi-a">${taslakta ? `+${taslakta} kişi yeni turda taslakta` : "kalanlar aynen geçerli"}</span></div>
+        <div class="kpi"><span class="kpi-l">Yeni Turda Tamamlanan</span><span class="kpi-n">${guncellenen}</span><span class="kpi-a">${taslakta ? `+${taslakta} kişi yeni turda taslakta` : "kalanlar yeni turda bekliyor"}</span></div>
       </div>
       <section class="pnl" style="margin-bottom:14px">
         <div class="pnl-h"><div><h3>Kim Doldurdu</h3><p>İsme tıklayınca liste o kişinin girdiği kayıtlara süzülür</p></div></div>
@@ -2530,7 +2557,7 @@ function renderAdmin() {
         <input type="text" id="ilkAra" placeholder="İsimle ara…" style="min-width:220px" value="${escH(I.q || "")}">
         <select id="ilkKim"><option value="">Tüm değerlendirenler</option>${kimListe.map((o) => `<option value="${escH(o.ad)}"${I.kim === o.ad ? " selected" : ""}>${escH(o.ad)}</option>`).join("")}</select>
         <select id="ilkDurum">${[["", "Tüm durumlar"], ["tamamlandi", "Tamamlandı (bugünkü personel)"], ["taslak", "Taslak"], ["ayrilan", "İşten ayrılanlar"]].map(([v, l]) => `<option value="${v}"${I.durum === v ? " selected" : ""}>${l}</option>`).join("")}</select>
-        <select id="ilkTur">${[["", "Yeni tur: hepsi"], ["aynen", "Aynen geçerli"], ["guncellendi", "Yeni turda güncellendi"], ["taslakta", "Yeni turda taslakta"]].map(([v, l]) => `<option value="${v}"${I.tur === v ? " selected" : ""}>${l}</option>`).join("")}</select>
+        <select id="ilkTur">${[["", "Yeni tur: hepsi"], ["aynen", "Yeni turda bekliyor"], ["guncellendi", "Yeni turda tamamlandı"], ["taslakta", "Yeni turda taslakta"]].map(([v, l]) => `<option value="${v}"${I.tur === v ? " selected" : ""}>${l}</option>`).join("")}</select>
         <button type="button" class="link-btn" id="ilkTemizle">Filtreleri temizle</button>
         <span class="tb-bosluk"></span>
         <span class="sonuc-say">${gorunen.length} kayıt · en yeni üstte</span>
